@@ -1,0 +1,18 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+# Proyectos vivos (nunca al git)
+odoo/backups/
+*/backups/
+.env
+# Instancias generadas — nunca al repo OMC (quedan en disco, fuera del push)
+# AGENTS.md es guía interna para agentes, no se publica
+AGENTS.md
+/odoo/
+/odoo17/

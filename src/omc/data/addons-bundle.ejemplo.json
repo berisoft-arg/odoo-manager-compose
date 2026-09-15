@@ -1,0 +1,36 @@
+{
+  "_comentario": "Plantilla bundle: repos y módulos a descargar TODOS JUNTOS en automático.",
+  "_uso": "1) Copia este archivo como addons-bundle.json  2) Llena los módulos  3) Asistente: elige usar plantilla, o corre: omc addons bundle addons-bundle.json --odoo 18",
+  "_branch": "Si un repo no trae 'branch', se usa version.0 según tu Odoo (18 -> 18.0). Solo pon 'branch' para casos raros.",
+  "_privados": "Para repos privados https exporta GITHUB_TOKEN antes. El token nunca se guarda.",
+  "modulos": [
+    {
+      "org": "oca",
+      "repo": "server-tools",
+      "modules": ["auditlog", "auto_backup"]
+    },
+    {
+      "org": "adhoc",
+      "repo": "odoo-argentina-ce",
+      "modules": ["l10n_ar_afipws", "l10n_ar_afipws_fe"]
+    },
+    {
+      "org": "cybrosys",
+      "repo": "CybroAddons",
+      "modules": []
+    },
+    {
+      "org": "mates",
+      "repo": "odooapps",
+      "modules": ["om_data_remove"]
+    },
+    {
+      "_ejemplo_custom": "Cualquier otro repo (incl. privado). Quita el guion bajo para activarlo.",
+      "_org": "custom",
+      "_repo": "MiRepo",
+      "_url": "https://github.com/MiOrg/MiRepo",
+      "_branch": "18.0",
+      "_modules": ["mi_modulo1", "mi_modulo2"]
+    }
+  ]
+}

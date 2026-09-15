@@ -1,0 +1,95 @@
+"""Entrada interactiva unificada (librería ask_*).
+
+Toda pregunta al usuario pasa por acá: una sola puerta por tipo de dato,
+defaults seguros sin tty y sin reventar ante basura o EOF.
+"""
+import sys
+
+
+def es_interactivo() -> bool:
+    return sys.stdin.isatty()
+
+
+def _leer(prompt: str) -> str:
+    try:
+        return input(prompt).strip()
+    except EOFError:
+        return ""
+
+
+def ask_texto(prompt: str, default: str = "") -> str:
+    """Texto libre con default. No interactivo/EOF -> default."""
+    if not es_interactivo():
+        return default
+    r = _leer(f"{prompt} [{default}]: ") if default else _leer(f"{prompt}: ")
+    return r if r else default
+
+
+def ask_opcion(prompt: str, opciones: list, default=None, aliases: dict = None) -> str:
+    """Menú numerado. Acepta número, valor o alias. default = valor."""
+    if default is None:
+        default = opciones[-1] if opciones else ""
+    if not es_interactivo():
+        return default
+    aliases = aliases or {}
+    print(f"\n{prompt}")
+    for i, op in enumerate(opciones, 1):
+        print(f"  {i}) {op}")
+    while True:
+        r = _leer(f"Elige [1-{len(opciones)}] (default {default}): ")
+        if not r:
+            return default
+        if r.isdigit() and 1 <= int(r) <= len(opciones):
+            return opciones[int(r) - 1]
+        if r in opciones:
+            return r
+        low = r.lower().replace(" ", "")
+        if low in aliases:
+            return aliases[low]
+        print("  Opción no válida, intenta de nuevo.")
+
+
+def ask_si_no(prompt: str, default_no: bool = True) -> bool:
+    """Sí/No numerado."""
+    dflt = "no" if default_no else "si"
+    return ask_opcion(prompt, ["si", "no"], dflt) == "si"
+
+
+def ask_puerto(prompt: str, default: int) -> int:
+    """Puerto validado (1-65535), reintenta ante basura."""
+    while True:
+        r = ask_texto(prompt, str(default))
+        try:
+            p = int(r)
+            if 1 <= p <= 65535:
+                return p
+        except (TypeError, ValueError):
+            pass
+        if not es_interactivo():
+            return default
+        print("  Puerto inválido (1-65535).")
+
+
+def ask_float(prompt: str, default: float) -> float:
+    while True:
+        r = ask_texto(prompt, str(default))
+        try:
+            return float(str(r).replace(",", "."))
+        except (TypeError, ValueError):
+            pass
+        if not es_interactivo():
+            return default
+        print("  Número inválido.")
+
+
+# Compat: el código viejo llamaba preguntar()/preguntar_si_no().
+def preguntar(prompt: str, default: str = "", opciones=None) -> str:
+    """Compat: delega en ask_*. No usar en código nuevo."""
+    if opciones:
+        return ask_opcion(prompt, opciones, default)
+    return ask_texto(prompt, default)
+
+
+def preguntar_si_no(prompt: str, default_no: bool = True) -> bool:
+    """Compat: delega en ask_si_no. No usar en código nuevo."""
+    return ask_si_no(prompt, default_no)

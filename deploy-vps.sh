@@ -1,0 +1,146 @@
+#!/usr/bin/env bash
+# Odoo Manager Compose — instalación nativa en VPS (venv aislado, sin Docker para omc).
+# Uso:
+#   git clone <tu-repo> ~/odoo-manager-compose
+#   cd ~/odoo-manager-compose
+#   OMC_HOME=~/omc-data ./deploy-vps.sh
+#
+# Variables (todas opcionales, con defaults sensatos):
+#   REPO_DIR=...       código (default: dir de este script)
+#   VENV_DIR=...       entorno virtual (default: ~/.venv/omc; se crea si falta)
+#   OMC_HOME=...       proyectos + datos de usuario (default: ~/omc-data)
+#   MONITOR_PORT=...   puerto del monitor (default: 8765)
+#   MONITOR_HOST=...   bind del monitor (default: 127.0.0.1; VPS público: reverse-proxy TLS)
+#   ODOO_WEB_TOKEN=... token del monitor (default: se genera y se muestra UNA vez)
+#
+# Idempotente: se puede correr de nuevo para actualizar (reinstala en el venv + reinicia).
+set -euo pipefail
+
+REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
+VENV_DIR="${VENV_DIR:-$HOME/.venv/omc}"
+OMC_HOME="${OMC_HOME:-$HOME/omc-data}"
+MONITOR_PORT="${MONITOR_PORT:-8765}"
+MONITOR_HOST="${MONITOR_HOST:-127.0.0.1}"
+UNIT_DIR="$HOME/.config/systemd/user"
+BIN_DIR="$HOME/.local/bin"
+
+log()  { printf '== %s\n' "$*"; }
+fail() { printf 'XX %s\n' "$*" >&2; exit 1; }
+
+# --- 1) Prerrequisitos -------------------------------------------------------
+log "Chequeando prerrequisitos..."
+command -v python3 >/dev/null || fail "falta python3 (apt install python3)"
+python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" \
+  || fail "se necesita Python >= 3.10 ($(python3 --version 2>&1))"
+python3 -c "import venv, ensurepip" 2>/dev/null \
+  || fail "falta python3-venv (apt install python3-venv)"
+command -v git >/dev/null || fail "falta git (apt install git)"
+# Docker + compose: si ya están, saltea instalación; si falta, intenta instalar (Debian/Ubuntu con apt + sudo)
+if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
+  log "Docker + compose OK — saltea instalación ($(docker --version 2>&1) / $(docker compose version 2>&1))"
+else
+  log "Docker o plugin compose no encontrado — intentando instalar..."
+  if command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
+    sudo apt-get update -qq
+    sudo apt-get install -y docker.io docker-compose-plugin \
+      || sudo apt-get install -y docker-compose-plugin \
+      || fail "no se pudo instalar docker compose (instalalo manual: https://docs.docker.com/engine/install/)"
+    sudo systemctl enable --now docker 2>/dev/null || true
+    if ! id -nG "$USER" 2>/dev/null | grep -qw docker; then
+      sudo usermod -aG docker "$USER"
+      echo "AVISO: te agregué al grupo docker — re-logueate o hacé 'newgrp docker' y corre ./deploy-vps.sh de nuevo"
+    fi
+    docker compose version >/dev/null 2>&1 || fail "docker compose sigue sin estar disponible tras la instalación"
+    log "Docker + compose instalado ($(docker --version 2>&1) / $(docker compose version 2>&1))"
+  else
+    fail "falta docker / compose y no hay apt/sudo para instalarlo. Instalá manual: https://docs.docker.com/engine/install/"
+  fi
+fi
+docker ps >/dev/null 2>&1 || fail "docker no accesible: sudo usermod -aG docker $USER y re-logueate"
+command -v systemctl >/dev/null || fail "falta systemctl (se necesita systemd)"
+systemctl --user status >/dev/null 2>&1 || fail "sin sesión systemd de usuario (conectate por SSH normal)"
+
+# --- 2) venv + install ---------------------------------------------------------
+if [ ! -x "$VENV_DIR/bin/python" ]; then
+  log "Creando venv en $VENV_DIR..."
+  python3 -m venv "$VENV_DIR" || fail "no se pudo crear el venv"
+else
+  log "venv existente en $VENV_DIR."
+fi
+log "Instalando requirements (requirements.txt) en el venv..."
+"$VENV_DIR/bin/pip" install -q -r "$REPO_DIR/requirements.txt" || fail "pip install requirements falló"
+log "Registrando odoo-manager-compose (sin re-resolver deps)..."
+"$VENV_DIR/bin/pip" install -q --no-deps "$REPO_DIR" || fail "pip install falló"
+[ -x "$VENV_DIR/bin/omc" ] || fail "omc no quedó instalado en el venv"
+
+# --- 3) Symlinks para uso comodo ------------------------------------------------
+mkdir -p "$BIN_DIR"
+ln -sf "$VENV_DIR/bin/omc" "$BIN_DIR/omc"
+ln -sf "$VENV_DIR/bin/omc-monitor" "$BIN_DIR/omc-monitor"
+log "Symlinks: $BIN_DIR/omc -> $VENV_DIR/bin/omc"
+case ":$PATH:" in
+  *":$BIN_DIR:"*) ;;
+  *) echo "AVISO: $BIN_DIR no está en tu PATH. Agregá a ~/.bashrc: export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+esac
+
+# --- 4) Datos -------------------------------------------------------------------
+mkdir -p "$OMC_HOME"
+log "OMC_HOME=$OMC_HOME"
+
+# --- 5) Token del monitor ---------------------------------------------------------
+if [ -z "${ODOO_WEB_TOKEN:-}" ]; then
+  ODOO_WEB_TOKEN="$("$VENV_DIR/bin/python" -c 'import secrets; print(secrets.token_urlsafe(32))')"
+  GENERADO=1
+else
+  GENERADO=0
+fi
+
+# --- 6) Servicio systemd de usuario -------------------------------------------------
+mkdir -p "$UNIT_DIR"
+UNIT="$UNIT_DIR/omc-monitor.service"
+log "Escribiendo $UNIT..."
+cat > "$UNIT" <<EOF
+[Unit]
+Description=Odoo Manager Compose - Monitor web (solo lectura)
+After=network.target
+
+[Service]
+Type=simple
+Environment=OMC_HOME=$OMC_HOME
+Environment=ODOO_WEB_TOKEN=$ODOO_WEB_TOKEN
+ExecStart=$VENV_DIR/bin/omc-monitor --host $MONITOR_HOST --port $MONITOR_PORT
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+EOF
+chmod 600 "$UNIT"  # el token vive acá: solo lectura del dueño
+systemctl --user daemon-reload
+systemctl --user enable --now omc-monitor >/dev/null
+sleep 2
+if systemctl --user is-active --quiet omc-monitor; then
+  log "Monitor activo."
+else
+  fail "el servicio no arrancó: systemctl --user status omc-monitor / journalctl --user -u omc-monitor"
+fi
+
+# --- 7) Resumen ----------------------------------------------------------------------
+echo ""
+echo "Odoo Manager Compose listo."
+echo "  omc:        $($VENV_DIR/bin/omc --version) ($BIN_DIR/omc -> venv)"
+echo "  OMC_HOME:   $OMC_HOME"
+echo "  Monitor:    http://$MONITOR_HOST:$MONITOR_PORT"
+if [ "$GENERADO" = "1" ]; then
+  echo "  Token:      $ODOO_WEB_TOKEN  (generado ahora; guardalo, no se muestra más)"
+else
+  echo "  Token:      (el de ODOO_WEB_TOKEN, provisto por vos)"
+fi
+echo ""
+echo "  Para que arranque sin login:  sudo loginctl enable-linger $USER"
+echo "  Logs:                         systemctl --user status omc-monitor"
+echo "  Actualizar:                   cd $REPO_DIR && git pull && ./deploy-vps.sh"
+echo "  Repos privados GitHub:        export GITHUB_TOKEN=...  (memoria, no se guarda)"
+echo ""
+echo "  Agregá a tu ~/.bashrc si OMC_HOME no persiste entre sesiones:"
+echo "    export OMC_HOME=$OMC_HOME"

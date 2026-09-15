@@ -1,0 +1,28 @@
+{
+  "_comment": "Perfiles de localización: bundle + extras de build. branch vacío = X.0 según Odoo. pip_exclude saca de requirements lo que apt provee.",
+  "argentina-adhoc": {
+    "nombre": "Argentina AdHoc (factura electrónica + IVA)",
+    "bundle": [
+      {"org": "adhoc", "repo": "odoo-argentina-ce", "modules": ["l10n_ar_afipws", "l10n_ar_afipws_fe"]}
+    ],
+    "pip_extra": ["cryptography"],
+    "pip_exclude": ["M2Crypto"],
+    "apt": ["python3-m2crypto"],
+    "seclevel": true,
+    "pyafipws_cache": true,
+    "notas": "Solo odoo-argentina-ce (FE + libros IVA). El resto (ux/sale) como módulos AdHoc normales; deps internas con deps --fix. En 19.0 los afipws están installable=False salvo PR #103."
+  },
+  "argentina-codize": {
+    "nombre": "Argentina Codize (un solo repo)",
+    "bundle": [
+      {"org": "codize", "repo": "odoo-argentina", "url": "https://github.com/codize-app/odoo-argentina",
+       "modules": ["l10n_ar_afipws", "l10n_ar_sale"]}
+    ],
+    "pip_extra": [],
+    "pip_exclude": ["M2Crypto"],
+    "apt": ["python3-m2crypto"],
+    "seclevel": true,
+    "pyafipws_cache": true,
+    "notas": "Mismo flujo manual que AdHoc (apt m2crypto + SECLEVEL + cache pyafipws). No mezclar variantes AR."
+  }
+}

@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=61", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "odoo-manager-compose"
+version = "1.0.0"
+description = "Odoo Manager Compose: creador + helper + monitor + migración Odoo con docker-compose"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["flask>=3.0"]
+
+[project.scripts]
+omc = "omc.cli:main"
+omc-monitor = "omc.webapp:main"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+omc = ["templates/*.tpl", "versions/*.env", "data/*.json", "monitor/templates/*.html"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-q"
+
+[tool.black]
+line-length = 100

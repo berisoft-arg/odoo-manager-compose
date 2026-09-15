@@ -1,0 +1,821 @@
+{
+  "_comment": "Catálogo curado. El helper permite además cualquier repo con --url (incl. privados con GITHUB_TOKEN).",
+  "oca": [
+    {
+      "repo": "account-analytic",
+      "url": "https://github.com/OCA/account-analytic"
+    },
+    {
+      "repo": "account-budgeting",
+      "url": "https://github.com/OCA/account-budgeting"
+    },
+    {
+      "repo": "account-closing",
+      "url": "https://github.com/OCA/account-closing"
+    },
+    {
+      "repo": "account-consolidation",
+      "url": "https://github.com/OCA/account-consolidation"
+    },
+    {
+      "repo": "account-financial-reporting",
+      "url": "https://github.com/OCA/account-financial-reporting"
+    },
+    {
+      "repo": "account-financial-tools",
+      "url": "https://github.com/OCA/account-financial-tools"
+    },
+    {
+      "repo": "account-fiscal-rule",
+      "url": "https://github.com/OCA/account-fiscal-rule"
+    },
+    {
+      "repo": "account-invoice-reporting",
+      "url": "https://github.com/OCA/account-invoice-reporting"
+    },
+    {
+      "repo": "account-invoicing",
+      "url": "https://github.com/OCA/account-invoicing"
+    },
+    {
+      "repo": "account-payment",
+      "url": "https://github.com/OCA/account-payment"
+    },
+    {
+      "repo": "account-reconcile",
+      "url": "https://github.com/OCA/account-reconcile"
+    },
+    {
+      "repo": "agreement",
+      "url": "https://github.com/OCA/agreement"
+    },
+    {
+      "repo": "ai",
+      "url": "https://github.com/OCA/ai"
+    },
+    {
+      "repo": "automation",
+      "url": "https://github.com/OCA/automation"
+    },
+    {
+      "repo": "bank-payment",
+      "url": "https://github.com/OCA/bank-payment"
+    },
+    {
+      "repo": "bank-payment-alternative",
+      "url": "https://github.com/OCA/bank-payment-alternative"
+    },
+    {
+      "repo": "bank-statement-import",
+      "url": "https://github.com/OCA/bank-statement-import"
+    },
+    {
+      "repo": "barcode-interface",
+      "url": "https://github.com/OCA/barcode-interface"
+    },
+    {
+      "repo": "brand",
+      "url": "https://github.com/OCA/brand"
+    },
+    {
+      "repo": "business-requirement",
+      "url": "https://github.com/OCA/business-requirement"
+    },
+    {
+      "repo": "calendar",
+      "url": "https://github.com/OCA/calendar"
+    },
+    {
+      "repo": "cim",
+      "url": "https://github.com/OCA/cim"
+    },
+    {
+      "repo": "commission",
+      "url": "https://github.com/OCA/commission"
+    },
+    {
+      "repo": "community-data-files",
+      "url": "https://github.com/OCA/community-data-files"
+    },
+    {
+      "repo": "connector",
+      "url": "https://github.com/OCA/connector"
+    },
+    {
+      "repo": "connector-accountedge",
+      "url": "https://github.com/OCA/connector-accountedge"
+    },
+    {
+      "repo": "connector-cmis",
+      "url": "https://github.com/OCA/connector-cmis"
+    },
+    {
+      "repo": "connector-ecommerce",
+      "url": "https://github.com/OCA/connector-ecommerce"
+    },
+    {
+      "repo": "connector-infor",
+      "url": "https://github.com/OCA/connector-infor"
+    },
+    {
+      "repo": "connector-interfaces",
+      "url": "https://github.com/OCA/connector-interfaces"
+    },
+    {
+      "repo": "connector-jira",
+      "url": "https://github.com/OCA/connector-jira"
+    },
+    {
+      "repo": "connector-lengow",
+      "url": "https://github.com/OCA/connector-lengow"
+    },
+    {
+      "repo": "connector-lims",
+      "url": "https://github.com/OCA/connector-lims"
+    },
+    {
+      "repo": "connector-magento",
+      "url": "https://github.com/OCA/connector-magento"
+    },
+    {
+      "repo": "connector-mautic",
+      "url": "https://github.com/OCA/connector-mautic"
+    },
+    {
+      "repo": "connector-prestashop",
+      "url": "https://github.com/OCA/connector-prestashop"
+    },
+    {
+      "repo": "connector-redmine",
+      "url": "https://github.com/OCA/connector-redmine"
+    },
+    {
+      "repo": "connector-sage",
+      "url": "https://github.com/OCA/connector-sage"
+    },
+    {
+      "repo": "connector-salesforce",
+      "url": "https://github.com/OCA/connector-salesforce"
+    },
+    {
+      "repo": "connector-shopify",
+      "url": "https://github.com/OCA/connector-shopify"
+    },
+    {
+      "repo": "connector-spscommerce",
+      "url": "https://github.com/OCA/connector-spscommerce"
+    },
+    {
+      "repo": "connector-telephony",
+      "url": "https://github.com/OCA/connector-telephony"
+    },
+    {
+      "repo": "connector-woocommerce",
+      "url": "https://github.com/OCA/connector-woocommerce"
+    },
+    {
+      "repo": "contract",
+      "url": "https://github.com/OCA/contract"
+    },
+    {
+      "repo": "cooperative",
+      "url": "https://github.com/OCA/cooperative"
+    },
+    {
+      "repo": "credit-control",
+      "url": "https://github.com/OCA/credit-control"
+    },
+    {
+      "repo": "crm",
+      "url": "https://github.com/OCA/crm"
+    },
+    {
+      "repo": "crowdfunding",
+      "url": "https://github.com/OCA/crowdfunding"
+    },
+    {
+      "repo": "currency",
+      "url": "https://github.com/OCA/currency"
+    },
+    {
+      "repo": "data-protection",
+      "url": "https://github.com/OCA/data-protection"
+    },
+    {
+      "repo": "ddmrp",
+      "url": "https://github.com/OCA/ddmrp"
+    },
+    {
+      "repo": "delivery-carrier",
+      "url": "https://github.com/OCA/delivery-carrier"
+    },
+    {
+      "repo": "department",
+      "url": "https://github.com/OCA/department"
+    },
+    {
+      "repo": "dms",
+      "url": "https://github.com/OCA/dms"
+    },
+    {
+      "repo": "donation",
+      "url": "https://github.com/OCA/donation"
+    },
+    {
+      "repo": "e-commerce",
+      "url": "https://github.com/OCA/e-commerce"
+    },
+    {
+      "repo": "e-learning",
+      "url": "https://github.com/OCA/e-learning"
+    },
+    {
+      "repo": "edi",
+      "url": "https://github.com/OCA/edi"
+    },
+    {
+      "repo": "edi-ediversa",
+      "url": "https://github.com/OCA/edi-ediversa"
+    },
+    {
+      "repo": "edi-framework",
+      "url": "https://github.com/OCA/edi-framework"
+    },
+    {
+      "repo": "edi-voxel",
+      "url": "https://github.com/OCA/edi-voxel"
+    },
+    {
+      "repo": "event",
+      "url": "https://github.com/OCA/event"
+    },
+    {
+      "repo": "field-service",
+      "url": "https://github.com/OCA/field-service"
+    },
+    {
+      "repo": "fleet",
+      "url": "https://github.com/OCA/fleet"
+    },
+    {
+      "repo": "geospatial",
+      "url": "https://github.com/OCA/geospatial"
+    },
+    {
+      "repo": "helpdesk",
+      "url": "https://github.com/OCA/helpdesk"
+    },
+    {
+      "repo": "hr",
+      "url": "https://github.com/OCA/hr"
+    },
+    {
+      "repo": "hr-attendance",
+      "url": "https://github.com/OCA/hr-attendance"
+    },
+    {
+      "repo": "hr-expense",
+      "url": "https://github.com/OCA/hr-expense"
+    },
+    {
+      "repo": "hr-holidays",
+      "url": "https://github.com/OCA/hr-holidays"
+    },
+    {
+      "repo": "intrastat-extrastat",
+      "url": "https://github.com/OCA/intrastat-extrastat"
+    },
+    {
+      "repo": "iot",
+      "url": "https://github.com/OCA/iot"
+    },
+    {
+      "repo": "knowledge",
+      "url": "https://github.com/OCA/knowledge"
+    },
+    {
+      "repo": "l10n-brazil",
+      "url": "https://github.com/OCA/l10n-brazil"
+    },
+    {
+      "repo": "l10n-italy",
+      "url": "https://github.com/OCA/l10n-italy"
+    },
+    {
+      "repo": "l10n-spain",
+      "url": "https://github.com/OCA/l10n-spain"
+    },
+    {
+      "repo": "mail",
+      "url": "https://github.com/OCA/mail"
+    },
+    {
+      "repo": "maintenance",
+      "url": "https://github.com/OCA/maintenance"
+    },
+    {
+      "repo": "management-system",
+      "url": "https://github.com/OCA/management-system"
+    },
+    {
+      "repo": "manufacture",
+      "url": "https://github.com/OCA/manufacture"
+    },
+    {
+      "repo": "manufacture-reporting",
+      "url": "https://github.com/OCA/manufacture-reporting"
+    },
+    {
+      "repo": "margin-analysis",
+      "url": "https://github.com/OCA/margin-analysis"
+    },
+    {
+      "repo": "mass-mailing",
+      "url": "https://github.com/OCA/mass-mailing"
+    },
+    {
+      "repo": "mis-builder",
+      "url": "https://github.com/OCA/mis-builder"
+    },
+    {
+      "repo": "mis-builder-contrib",
+      "url": "https://github.com/OCA/mis-builder-contrib"
+    },
+    {
+      "repo": "multi-company",
+      "url": "https://github.com/OCA/multi-company"
+    },
+    {
+      "repo": "odoo-pim",
+      "url": "https://github.com/OCA/odoo-pim"
+    },
+    {
+      "repo": "operating-unit",
+      "url": "https://github.com/OCA/operating-unit"
+    },
+    {
+      "repo": "partner-contact",
+      "url": "https://github.com/OCA/partner-contact"
+    },
+    {
+      "repo": "payroll",
+      "url": "https://github.com/OCA/payroll"
+    },
+    {
+      "repo": "pms",
+      "url": "https://github.com/OCA/pms"
+    },
+    {
+      "repo": "pos",
+      "url": "https://github.com/OCA/pos"
+    },
+    {
+      "repo": "product-attribute",
+      "url": "https://github.com/OCA/product-attribute"
+    },
+    {
+      "repo": "product-configurator",
+      "url": "https://github.com/OCA/product-configurator"
+    },
+    {
+      "repo": "product-kitting",
+      "url": "https://github.com/OCA/product-kitting"
+    },
+    {
+      "repo": "product-pack",
+      "url": "https://github.com/OCA/product-pack"
+    },
+    {
+      "repo": "product-variant",
+      "url": "https://github.com/OCA/product-variant"
+    },
+    {
+      "repo": "program",
+      "url": "https://github.com/OCA/program"
+    },
+    {
+      "repo": "project",
+      "url": "https://github.com/OCA/project"
+    },
+    {
+      "repo": "project-agile",
+      "url": "https://github.com/OCA/project-agile"
+    },
+    {
+      "repo": "project-reporting",
+      "url": "https://github.com/OCA/project-reporting"
+    },
+    {
+      "repo": "purchase-reporting",
+      "url": "https://github.com/OCA/purchase-reporting"
+    },
+    {
+      "repo": "purchase-workflow",
+      "url": "https://github.com/OCA/purchase-workflow"
+    },
+    {
+      "repo": "pwa-builder",
+      "url": "https://github.com/OCA/pwa-builder"
+    },
+    {
+      "repo": "queue",
+      "url": "https://github.com/OCA/queue"
+    },
+    {
+      "repo": "repair",
+      "url": "https://github.com/OCA/repair"
+    },
+    {
+      "repo": "report-print-send",
+      "url": "https://github.com/OCA/report-print-send"
+    },
+    {
+      "repo": "reporting-engine",
+      "url": "https://github.com/OCA/reporting-engine"
+    },
+    {
+      "repo": "resource",
+      "url": "https://github.com/OCA/resource"
+    },
+    {
+      "repo": "rest-api",
+      "url": "https://github.com/OCA/rest-api"
+    },
+    {
+      "repo": "rest-framework",
+      "url": "https://github.com/OCA/rest-framework"
+    },
+    {
+      "repo": "rma",
+      "url": "https://github.com/OCA/rma"
+    },
+    {
+      "repo": "role-policy",
+      "url": "https://github.com/OCA/role-policy"
+    },
+    {
+      "repo": "route-planning",
+      "url": "https://github.com/OCA/route-planning"
+    },
+    {
+      "repo": "sale-blanket",
+      "url": "https://github.com/OCA/sale-blanket"
+    },
+    {
+      "repo": "sale-channel",
+      "url": "https://github.com/OCA/sale-channel"
+    },
+    {
+      "repo": "sale-financial",
+      "url": "https://github.com/OCA/sale-financial"
+    },
+    {
+      "repo": "sale-prebook",
+      "url": "https://github.com/OCA/sale-prebook"
+    },
+    {
+      "repo": "sale-promotion",
+      "url": "https://github.com/OCA/sale-promotion"
+    },
+    {
+      "repo": "sale-reporting",
+      "url": "https://github.com/OCA/sale-reporting"
+    },
+    {
+      "repo": "sale-workflow",
+      "url": "https://github.com/OCA/sale-workflow"
+    },
+    {
+      "repo": "search-engine",
+      "url": "https://github.com/OCA/search-engine"
+    },
+    {
+      "repo": "server-auth",
+      "url": "https://github.com/OCA/server-auth"
+    },
+    {
+      "repo": "server-backend",
+      "url": "https://github.com/OCA/server-backend"
+    },
+    {
+      "repo": "server-brand",
+      "url": "https://github.com/OCA/server-brand"
+    },
+    {
+      "repo": "server-env",
+      "url": "https://github.com/OCA/server-env"
+    },
+    {
+      "repo": "server-tools",
+      "url": "https://github.com/OCA/server-tools"
+    },
+    {
+      "repo": "server-ux",
+      "url": "https://github.com/OCA/server-ux"
+    },
+    {
+      "repo": "shift-planning",
+      "url": "https://github.com/OCA/shift-planning"
+    },
+    {
+      "repo": "shopfloor-app",
+      "url": "https://github.com/OCA/shopfloor-app"
+    },
+    {
+      "repo": "shoppingfeed",
+      "url": "https://github.com/OCA/shoppingfeed"
+    },
+    {
+      "repo": "sign",
+      "url": "https://github.com/OCA/sign"
+    },
+    {
+      "repo": "social",
+      "url": "https://github.com/OCA/social"
+    },
+    {
+      "repo": "spreadsheet",
+      "url": "https://github.com/OCA/spreadsheet"
+    },
+    {
+      "repo": "stock-logistics-availability",
+      "url": "https://github.com/OCA/stock-logistics-availability"
+    },
+    {
+      "repo": "stock-logistics-barcode",
+      "url": "https://github.com/OCA/stock-logistics-barcode"
+    },
+    {
+      "repo": "stock-logistics-interfaces",
+      "url": "https://github.com/OCA/stock-logistics-interfaces"
+    },
+    {
+      "repo": "stock-logistics-orderpoint",
+      "url": "https://github.com/OCA/stock-logistics-orderpoint"
+    },
+    {
+      "repo": "stock-logistics-putaway",
+      "url": "https://github.com/OCA/stock-logistics-putaway"
+    },
+    {
+      "repo": "stock-logistics-release-channel",
+      "url": "https://github.com/OCA/stock-logistics-release-channel"
+    },
+    {
+      "repo": "stock-logistics-reporting",
+      "url": "https://github.com/OCA/stock-logistics-reporting"
+    },
+    {
+      "repo": "stock-logistics-request",
+      "url": "https://github.com/OCA/stock-logistics-request"
+    },
+    {
+      "repo": "stock-logistics-reservation",
+      "url": "https://github.com/OCA/stock-logistics-reservation"
+    },
+    {
+      "repo": "stock-logistics-shopfloor",
+      "url": "https://github.com/OCA/stock-logistics-shopfloor"
+    },
+    {
+      "repo": "stock-logistics-tracking",
+      "url": "https://github.com/OCA/stock-logistics-tracking"
+    },
+    {
+      "repo": "stock-logistics-transport",
+      "url": "https://github.com/OCA/stock-logistics-transport"
+    },
+    {
+      "repo": "stock-logistics-warehouse",
+      "url": "https://github.com/OCA/stock-logistics-warehouse"
+    },
+    {
+      "repo": "stock-logistics-workflow",
+      "url": "https://github.com/OCA/stock-logistics-workflow"
+    },
+    {
+      "repo": "stock-weighing",
+      "url": "https://github.com/OCA/stock-weighing"
+    },
+    {
+      "repo": "storage",
+      "url": "https://github.com/OCA/storage"
+    },
+    {
+      "repo": "survey",
+      "url": "https://github.com/OCA/survey"
+    },
+    {
+      "repo": "tier-validation",
+      "url": "https://github.com/OCA/tier-validation"
+    },
+    {
+      "repo": "timesheet",
+      "url": "https://github.com/OCA/timesheet"
+    },
+    {
+      "repo": "vertical-abbey",
+      "url": "https://github.com/OCA/vertical-abbey"
+    },
+    {
+      "repo": "vertical-agriculture",
+      "url": "https://github.com/OCA/vertical-agriculture"
+    },
+    {
+      "repo": "vertical-association",
+      "url": "https://github.com/OCA/vertical-association"
+    },
+    {
+      "repo": "vertical-community",
+      "url": "https://github.com/OCA/vertical-community"
+    },
+    {
+      "repo": "vertical-construction",
+      "url": "https://github.com/OCA/vertical-construction"
+    },
+    {
+      "repo": "vertical-cooperative-supermarket",
+      "url": "https://github.com/OCA/vertical-cooperative-supermarket"
+    },
+    {
+      "repo": "vertical-edition",
+      "url": "https://github.com/OCA/vertical-edition"
+    },
+    {
+      "repo": "vertical-education",
+      "url": "https://github.com/OCA/vertical-education"
+    },
+    {
+      "repo": "vertical-hotel",
+      "url": "https://github.com/OCA/vertical-hotel"
+    },
+    {
+      "repo": "vertical-isp",
+      "url": "https://github.com/OCA/vertical-isp"
+    },
+    {
+      "repo": "vertical-medical",
+      "url": "https://github.com/OCA/vertical-medical"
+    },
+    {
+      "repo": "vertical-ngo",
+      "url": "https://github.com/OCA/vertical-ngo"
+    },
+    {
+      "repo": "vertical-realestate",
+      "url": "https://github.com/OCA/vertical-realestate"
+    },
+    {
+      "repo": "vertical-rental",
+      "url": "https://github.com/OCA/vertical-rental"
+    },
+    {
+      "repo": "vertical-travel",
+      "url": "https://github.com/OCA/vertical-travel"
+    },
+    {
+      "repo": "wallet",
+      "url": "https://github.com/OCA/wallet"
+    },
+    {
+      "repo": "web",
+      "url": "https://github.com/OCA/web"
+    },
+    {
+      "repo": "web-api",
+      "url": "https://github.com/OCA/web-api"
+    },
+    {
+      "repo": "web-api-contrib",
+      "url": "https://github.com/OCA/web-api-contrib"
+    },
+    {
+      "repo": "webhook",
+      "url": "https://github.com/OCA/webhook"
+    },
+    {
+      "repo": "webkit-tools",
+      "url": "https://github.com/OCA/webkit-tools"
+    },
+    {
+      "repo": "website",
+      "url": "https://github.com/OCA/website"
+    },
+    {
+      "repo": "website-cms",
+      "url": "https://github.com/OCA/website-cms"
+    },
+    {
+      "repo": "website-themes",
+      "url": "https://github.com/OCA/website-themes"
+    },
+    {
+      "repo": "wms",
+      "url": "https://github.com/OCA/wms"
+    }
+  ],
+  "adhoc": [
+    {
+      "repo": "account-financial-tools",
+      "url": "https://github.com/ingadhoc/account-financial-tools"
+    },
+    {
+      "repo": "account-invoicing",
+      "url": "https://github.com/ingadhoc/account-invoicing"
+    },
+    {
+      "repo": "account-payment",
+      "url": "https://github.com/ingadhoc/account-payment"
+    },
+    {
+      "repo": "argentina-sale",
+      "url": "https://github.com/ingadhoc/argentina-sale"
+    },
+    {
+      "repo": "data-modules",
+      "url": "https://github.com/ingadhoc/data-modules"
+    },
+    {
+      "repo": "hr",
+      "url": "https://github.com/ingadhoc/hr"
+    },
+    {
+      "repo": "miscellaneous",
+      "url": "https://github.com/ingadhoc/miscellaneous"
+    },
+    {
+      "repo": "multi-company",
+      "url": "https://github.com/ingadhoc/multi-company"
+    },
+    {
+      "repo": "multi-store",
+      "url": "https://github.com/ingadhoc/multi-store"
+    },
+    {
+      "repo": "odoo-academic",
+      "url": "https://github.com/ingadhoc/odoo-academic"
+    },
+    {
+      "repo": "odoo-argentina",
+      "url": "https://github.com/ingadhoc/odoo-argentina"
+    },
+    {
+      "repo": "odoo-argentina-ce",
+      "url": "https://github.com/ingadhoc/odoo-argentina-ce"
+    },
+    {
+      "repo": "odoo-argentina-ee",
+      "url": "https://github.com/ingadhoc/odoo-argentina-ee"
+    },
+    {
+      "repo": "odoo-public-administration",
+      "url": "https://github.com/ingadhoc/odoo-public-administration"
+    },
+    {
+      "repo": "partner",
+      "url": "https://github.com/ingadhoc/partner"
+    },
+    {
+      "repo": "product",
+      "url": "https://github.com/ingadhoc/product"
+    },
+    {
+      "repo": "project",
+      "url": "https://github.com/ingadhoc/project"
+    },
+    {
+      "repo": "purchase",
+      "url": "https://github.com/ingadhoc/purchase"
+    },
+    {
+      "repo": "sale",
+      "url": "https://github.com/ingadhoc/sale"
+    },
+    {
+      "repo": "stock",
+      "url": "https://github.com/ingadhoc/stock"
+    },
+    {
+      "repo": "website",
+      "url": "https://github.com/ingadhoc/website"
+    }
+  ],
+  "cybrosys": [
+    {
+      "repo": "CybroAddons",
+      "url": "https://github.com/CybroOdoo/CybroAddons"
+    }
+  ],
+  "mates": [
+    {
+      "repo": "odooapps",
+      "url": "https://github.com/odoomates/odooapps"
+    }
+  ],
+  "codize": [
+    {
+      "repo": "odoo-argentina",
+      "url": "https://github.com/codize-app/odoo-argentina"
+    }
+  ]
+}

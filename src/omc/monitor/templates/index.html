@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Odoo Manager Compose — Monitor</title>
+<style>
+:root{ /* claro marfil/gris + violeta + magenta */
+  --bg:#ECDFD2; --card:#FFFFFF; --txt:#111111; --mut:#6E6A70;
+  --line:#CCCACC; --acc:#5F3475; --acc-tx:#FFFFFF; --fuc:#893172;
+  --log-bg:#17131c; --log-tx:#efe6f2;
+}
+[data-theme="dark"]{ /* negro + blanco, mismos acentos */
+  --bg:#0E0E10; --card:#17171B; --txt:#FFFFFF; --mut:#CCCACC;
+  --line:#2C2C31; --acc:#5F3475; --acc-tx:#FFFFFF; --fuc:#893172;
+  --log-bg:#000000; --log-tx:#efe6f2;
+}
+body{font-family:system-ui,sans-serif;margin:0;background:var(--bg);color:var(--txt)}
+header{background:var(--acc);color:#fff;padding:12px 18px;display:flex;gap:10px;align-items:center}
+header .t b{font-size:17px}header .t span{display:block;font-size:11px;opacity:.85;letter-spacing:2px}
+header .sp{flex:1}
+#tema{background:transparent;border:1px solid currentColor;color:inherit;border-radius:6px;padding:7px 10px;cursor:pointer}
+main{padding:16px;max-width:1100px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:12px}
+h2{font-size:14px;letter-spacing:1px;text-transform:uppercase;color:var(--acc);margin:0 0 10px}
+[data-theme="dark"] h2{color:#c9a8e0}
+table{border-collapse:collapse;width:100%}td,th{border:1px solid var(--line);padding:6px 8px;font-size:13px;text-align:left}
+th{color:var(--mut);font-weight:600}
+pre{background:var(--log-bg);color:var(--log-tx);font-size:12px;padding:10px;border-radius:6px;max-height:420px;overflow:auto;white-space:pre-wrap}
+input,select{padding:7px;margin:3px;border:1px solid var(--line);border-radius:5px;font-size:13px;background:var(--card);color:var(--txt)}
+button.go{background:var(--acc);color:#fff;border:0;padding:8px 14px;border-radius:6px;cursor:pointer;margin:3px}
+button.go:hover{background:var(--fuc)}
+button.lin{background:transparent;border:1px solid var(--line);color:var(--txt);padding:6px 10px;border-radius:6px;cursor:pointer;margin:2px}
+button.lin:hover{border-color:var(--fuc);color:var(--fuc)}
+.row{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.mut{color:var(--mut);font-size:12px}
+#login{max-width:420px;margin:8vh auto}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;margin-right:5px}
+.ok{background:#2fa35f}.off{background:#999}.mid{background:var(--fuc)}
+</style>
+</head>
+<body>
+<header><div class="t"><b>Odoo Manager Compose</b><span>MONITOR</span></div>
+<span class="sp"></span><button id="tema" onclick="cambiarTema()">🌙/☀️</button></header>
+<main>
+<div id="login" class="card" style="display:none">
+<h3>Token</h3>
+<input id="tok" type="password" placeholder="token de consola" style="width:100%">
+<button class="go" onclick="guardarTok()">Entrar</button>
+</div>
+<div id="app" style="display:none">
+<div class="card"><div class="row"><h2 style="margin:0">Proyectos</h2><span class="sp" style="flex:1"></span>
+<button class="go" onclick="cargarTodo()">Actualizar</button><span class="mut" id="updP"></span></div>
+<table id="tabP"></table></div>
+<div class="card"><h2>Contenedores</h2>
+<div class="row"><label class="mut"><input type="checkbox" id="autoC" onchange="autoCont()"> auto 10s</label>
+<span class="mut" id="updC"></span></div>
+<table id="tabC"></table></div>
+<div class="card"><h2>Logs <span id="logTit"></span></h2>
+<div class="row"><select id="logProy"></select>
+<select id="logSvc"><option value="">odoo+db</option><option>odoo</option><option>db</option><option>nginx</option></select>
+<select id="logTail"><option>100</option><option selected>300</option><option>1000</option></select>
+<button class="go" onclick="verLogs()">Ver</button>
+<label class="mut"><input type="checkbox" id="auto" onchange="autoLogs()"> auto 5s</label></div>
+<pre id="logOut">—</pre></div>
+<div class="card"><div class="row"><h2 style="margin:0">Métricas</h2><span class="sp" style="flex:1"></span>
+<select id="mProy"></select>
+<button class="go" onclick="verMet()">Actualizar</button>
+<label class="mut"><input type="checkbox" id="autoM" onchange="autoMet()"> auto 20s</label>
+<span class="mut" id="updM"></span></div>
+<div id="metOut" class="mut">—</div></div>
+</div>
+</main>
+<script>
+window.onerror=function(m){var d=document.getElementById("app");d.style.display="block";d.innerHTML="<div class='card'><b>Error:</b> "+m+"<br>Haz Ctrl+Shift+R.</div>"};
+let TOK="";try{TOK=localStorage.getItem("otok")||""}catch(e){}
+function temaInit(){let t="light";try{t=localStorage.getItem("otheme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")}catch(e){}document.documentElement.dataset.theme=t}
+function cambiarTema(){let t=document.documentElement.dataset.theme=="dark"?"light":"dark";document.documentElement.dataset.theme=t;try{localStorage.setItem("otheme",t)}catch(e){}}
+temaInit();
+function api(p){return fetch(p,{headers:{"X-Token":TOK}}).then(r=>{if(r.status==401)throw "token";return r.json()})}
+function guardarTok(){TOK=document.getElementById("tok").value;try{localStorage.setItem("otok",TOK)}catch(e){}init()}
+function init(){if(!TOK){document.getElementById("login").style.display="block";return}
+document.getElementById("login").style.display="none";document.getElementById("app").style.display="block";
+cargarTodo()}
+let PROY="",timerL=null,timerC=null;
+function dot(est){let c="off";if(/running|marcha/i.test(est)&&!/0\//.test(est))c="ok";else if(/[1-9]\//.test(est))c="mid";return `<span class="dot ${c}"></span>`}
+function ahora(id){document.getElementById(id).textContent="act. "+new Date().toLocaleTimeString()}
+function cargarTodo(){cargarProyectos();cargarCont()}
+function cargarProyectos(){return api("/api/proyectos").then(d=>{let h="<tr><th>Proyecto</th><th>Odoo</th><th>Puerto</th><th>Dominio</th><th>Estado</th><th></th></tr>";let mp="";
+d.forEach(p=>{h+=`<tr><td>${p.nombre}</td><td>${p.odoo}</td><td>${p.puerto}</td><td>${p.dominio}</td><td>${dot(p.estado)}${p.estado}</td><td><button class="lin" onclick="logsDe('${p.nombre}')">logs</button></td></tr>`;mp+=`<option${p.nombre===PROY?" selected":""}>${p.nombre}</option>`});
+document.getElementById("tabP").innerHTML=h;document.getElementById("logProy").innerHTML=mp;document.getElementById("mProy").innerHTML=mp;if(!PROY&&d.length)PROY=d[0].nombre;ahora("updP")}).catch(()=>{document.getElementById("login").style.display="block";document.getElementById("app").style.display="none"})}
+function cargarCont(){return api("/api/contenedores").then(d=>{let h="<tr><th>Nombre</th><th>Imagen</th><th>Estado</th><th>Puertos</th></tr>";d.forEach(c=>{let run=/running|up/i.test(c.estado);h+=`<tr><td>${c.nombre}</td><td>${c.imagen}</td><td>${dot(run?"running":"stop")}${c.estado}</td><td>${c.puertos}</td></tr>`});document.getElementById("tabC").innerHTML=h;ahora("updC")})}
+function logsDe(p){PROY=p;document.getElementById("logProy").value=p;verLogs();window.scrollTo(0,document.getElementById("logOut").offsetTop-120)}
+function verLogs(){const p=document.getElementById("logProy").value||PROY;if(!p)return;PROY=p;document.getElementById("logTit").textContent="· "+p;
+api(`/api/logs?proyecto=${encodeURIComponent(p)}&servicio=${document.getElementById("logSvc").value}&tail=${document.getElementById("logTail").value}`).then(d=>{document.getElementById("logOut").textContent=d.log||d.error||"—"})}
+function autoLogs(){clearInterval(timerL);if(document.getElementById("auto").checked)timerL=setInterval(verLogs,5000)}
+function autoCont(){clearInterval(timerC);if(document.getElementById("autoC").checked)timerC=setInterval(cargarCont,10000)}
+let MPROY="",timerM=null;
+function hum(n){if(n==null)return "?";const u=["B","KB","MB","GB","TB"];let i=0;while(n>=1024&&i<u.length-1){n/=1024;i++}return (i? n.toFixed(1):Math.round(n))+u[i]}
+function bar(pct){pct=Math.max(0,Math.min(100,pct||0));const c=pct>85?"var(--fuc)":(pct>60?"#d9a021":"#2fa35f");return `<div style="background:var(--line);border-radius:4px;height:10px"><div style="width:${pct}%;height:10px;border-radius:4px;background:${c}"></div></div>`}
+function verMet(){const p=document.getElementById("mProy").value||PROY;if(!p)return;MPROY=p;
+api(`/api/metricas/${encodeURIComponent(p)}`).then(d=>{if(d.error){document.getElementById("metOut").textContent=d.error;return}
+let h="";const pg=d.postgres||{};
+if(pg.ok){const pc=pg.max_conn?Math.round(100*(pg.conexiones||0)/pg.max_conn):0;
+h+=`<h4>Postgres: ${pg.conexiones??"?"}/${pg.max_conn||"?"} conexiones (bloqueos: ${pg.bloqueos??"?"})</h4>`+bar(pc);
+h+="<table><tr><th>Base</th><th>Tamaño</th><th>Δ ~24h</th></tr>";
+(pg.bases||[]).forEach(b=>{const g=(d.crecimiento||[]).find(x=>x.bd===b.bd);h+=`<tr><td>${b.bd}</td><td>${hum(b.bytes)}</td><td>${g?(g.delta>=0?"+":"")+hum(g.delta):"—"}</td></tr>`});h+="</table>";
+if((pg.lentas||[]).length){h+="<h4>Consultas lentas (>5s)</h4><table>";pg.lentas.forEach(l=>{const p3=l.split("|");h+=`<tr><td>${p3[0]||""}</td><td>${p3[1]||""}</td><td>${(p3[2]||"").slice(0,90)}</td></tr>`});h+="</table>"}
+(pg.cron||[]).forEach(c=>{h+=`<h4>Cron ${c.bd} (${c.tareas.length} activos)</h4><table>`;c.tareas.forEach(t=>{const p3=t.split("|");h+=`<tr><td>${p3[0]||""}</td><td>${p3[1]||""}</td><td>${p3[2]||""}</td></tr>`});h+="</table>"});
+}else h+="<p>Postgres no disponible (¿db apagada?).</p>";
+if((d.stats||[]).length){h+="<h4>Contenedores CPU/RAM</h4><table><tr><th>Nombre</th><th>CPU</th><th>RAM</th><th>%MEM</th></tr>";d.stats.forEach(s=>{h+=`<tr><td>${s.nombre}</td><td>${s.cpu}</td><td>${s.mem}</td><td>${s.memp}</td></tr>`});h+="</table>"}
+if(d.disco&&d.disco.total){const pu=Math.round(100*d.disco.usado/d.disco.total);h+=`<h4>Disco: ${hum(d.disco.usado)}/${hum(d.disco.total)} (backups: ${hum(d.backups_bytes)})</h4>`+bar(pu)}
+if(d.backup&&d.backup.carpeta){const f=new Date(d.backup.fecha*1000).toLocaleString();h+=`<p>Último backup: <b>${d.backup.carpeta}</b> ${f} · ${hum(d.backup.bytes)} · ${d.backup.ok?"✓ db.dump":"⚠ sin db.dump"}</p>`}else h+="<p>Sin backups locales.</p>";
+if(d.ssl&&d.ssl.dias!=null)h+=`<p>SSL ${d.ssl.dominio}: <b>${d.ssl.dias} días</b> ${d.ssl.dias<15?"⚠ renueva pronto":""}</p>`;
+if(d.http_5xx!=null)h+=`<p>Errores 5xx nginx (últimos 500 logs): <b>${d.http_5xx}</b></p>`;
+document.getElementById("metOut").innerHTML=h;ahora("updM")})}
+function autoMet(){clearInterval(timerM);if(document.getElementById("autoM").checked)timerM=setInterval(verMet,20000)}
+init();
+</script>
+</body>
+</html>
