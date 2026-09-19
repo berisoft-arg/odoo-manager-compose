@@ -37,16 +37,33 @@ python3 -c "import sys; sys.exit(0 if sys.version_info >= (3, 10) else 1)" \
 python3 -c "import venv, ensurepip" 2>/dev/null \
   || fail "falta python3-venv (apt install python3-venv)"
 command -v git >/dev/null || fail "falta git (apt install git)"
-# Docker + compose: si ya están, saltea instalación; si falta, intenta instalar (Debian/Ubuntu con apt + sudo)
+# Docker + compose OFICIAL (único origen válido): si ya responden, no se toca
+# nada — jamás migrar un motor en uso ni mezclar con docker.io de Ubuntu.
 if command -v docker >/dev/null 2>&1 && docker compose version >/dev/null 2>&1; then
   log "Docker + compose OK — saltea instalación ($(docker --version 2>&1) / $(docker compose version 2>&1))"
+elif command -v docker >/dev/null 2>&1; then
+  fail "hay engine docker pero sin plugin compose: instalá el plugin oficial (https://docs.docker.com/engine/install/) y corre ./deploy-vps.sh de nuevo. No se auto-migra un motor en uso."
 else
-  log "Docker o plugin compose no encontrado — intentando instalar..."
+  log "Docker no encontrado — instalando desde el repo oficial..."
   if command -v apt-get >/dev/null 2>&1 && command -v sudo >/dev/null 2>&1; then
+    # shellcheck disable=SC1091
+    . /etc/os-release
+    case "${ID:-debian} ${ID_LIKE:-}" in
+      ubuntu* | *ubuntu*) REPO_OS=ubuntu ;; # Ubuntu + derivados (Mint, Pop!_OS)
+      *) REPO_OS=debian ;;
+    esac
+    CODENAME="${VERSION_CODENAME:-stable}"
+    ARCH="$(dpkg --print-architecture)"
     sudo apt-get update -qq
-    sudo apt-get install -y docker.io docker-compose-plugin \
-      || sudo apt-get install -y docker-compose-plugin \
-      || fail "no se pudo instalar docker compose (instalalo manual: https://docs.docker.com/engine/install/)"
+    sudo apt-get install -y ca-certificates curl gnupg
+    sudo install -m 0755 -d /etc/apt/keyrings
+    sudo curl -fsSL "https://download.docker.com/linux/${REPO_OS}/gpg" -o /etc/apt/keyrings/docker.asc
+    sudo chmod a+r /etc/apt/keyrings/docker.asc
+    echo "deb [arch=${ARCH} signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/${REPO_OS} ${CODENAME} stable" \
+      | sudo tee /etc/apt/sources.list.d/docker.list >/dev/null
+    sudo apt-get update -qq
+    sudo apt-get install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin \
+      || fail "no se pudo instalar docker oficial (instalalo manual: https://docs.docker.com/engine/install/)"
     sudo systemctl enable --now docker 2>/dev/null || true
     if ! id -nG "$USER" 2>/dev/null | grep -qw docker; then
       sudo usermod -aG docker "$USER"

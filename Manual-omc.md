@@ -681,14 +681,16 @@ correría con los binarios origen y no migraría nada) y `scripts/migrate_db.sh`
 
 **Instalación express en un VPS nuevo (tres pasos, un bloque por pegada):**
 
-Paso 1 — base + docker + grupo:
+Paso 1 — base:
 
 ```bash
-sudo apt update && sudo apt install -y python3 python3-venv git curl docker.io docker-compose-plugin
-sudo usermod -aG docker $USER
+sudo apt update && sudo apt install -y python3 python3-venv git curl
 ```
 
-Re-logueate (o `newgrp docker`) antes de seguir.
+Docker + compose (solo origen oficial): si ya responden, el deploy los respeta
+tal cual; si faltan, el deploy instala el repo oficial solo. Nunca `docker.io`
+junto a Docker oficial (chocan `containerd`/`containerd.io`). Tras el deploy:
+re-login (o `newgrp docker`) por el grupo docker.
 
 Paso 2 — omc (el deploy prepara /opt/omc + /opt con sudo único; uso diario sin sudo):
 

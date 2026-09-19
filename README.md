@@ -36,14 +36,16 @@ Python 3.10+, Git, Docker con plugin compose. Para repos privados en https:
 
 **Instalación express en un VPS nuevo (tres pasos, un bloque por pegada):**
 
-Paso 1 — base + docker + grupo:
+Paso 1 — base:
 
 ```bash
-sudo apt update && sudo apt install -y python3 python3-venv git curl docker.io docker-compose-plugin
-sudo usermod -aG docker $USER
+sudo apt update && sudo apt install -y python3 python3-venv git curl
 ```
 
-Re-logueate (o `newgrp docker`) antes de seguir.
+Docker + compose (solo origen oficial): si ya responden, el deploy los respeta
+tal cual; si faltan, el deploy instala el repo oficial solo. Nunca `docker.io`
+junto a Docker oficial (chocan `containerd`/`containerd.io`). Tras el deploy:
+re-login (o `newgrp docker`) por el grupo docker.
 
 Paso 2 — omc (el deploy prepara /opt/omc + /opt con sudo único; uso diario sin sudo):
 
@@ -67,11 +69,10 @@ omc --version && omc list   # `omc` pelado abre el menú 1-10
 sudo apt update
 sudo apt install -y python3 python3-venv python3-pip git curl
 
-# 2) Docker (si ya tenés docker compose, deploy-vps.sh lo saltea)
-#    Si no está, deploy-vps.sh lo instala solo con apt + sudo.
-#    Manual alternativo: sudo apt install -y docker.io docker-compose-plugin
-#    https://docs.docker.com/engine/install/ubuntu/
-#    Luego: sudo usermod -aG docker $USER && newgrp docker  # o re-logueate
+# 2) Docker oficial (si ya tenés docker compose, deploy-vps.sh lo saltea y lo respeta)
+#    Si no está, deploy-vps.sh instala el repo oficial solo (nunca docker.io).
+#    Manual alternativo (repo oficial): https://docs.docker.com/engine/install/ubuntu/
+#    Luego: re-login o `newgrp docker` por el grupo docker.
 
 # 3) Bajar OMC (no clonar dentro de odoo-manager-compose)
 git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose
@@ -111,8 +112,8 @@ ln -sf ~/.venv/omc/bin/omc-monitor ~/.local/bin/omc-monitor
 
 **En VPS (producción):** clonar y correr `./deploy-vps.sh` — crea el venv,
 instala, deja symlinks, genera token y habilita `omc-monitor` como servicio
-systemd de usuario. Si `docker compose` ya está instalado lo saltea; si falta
-lo instala automáticamente (Debian/Ubuntu con `apt` + `sudo`). Ver [Manual §17](Manual-omc.md#17-vps-con-deploy-vpssh).
+systemd de usuario. Si `docker compose` ya está instalado lo respeta; si falta
+lo instala del repo oficial (Debian/Ubuntu con `apt` + `sudo`, nunca `docker.io`). Ver [Manual §17](Manual-omc.md#17-vps-con-deploy-vpssh).
 
 **Desarrollo:**
 
