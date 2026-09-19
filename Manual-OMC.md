@@ -1,5 +1,8 @@
 # Odoo Manager Compose — Manual completo
 
+> En este manual, **Odoo Manager Compose** y su abreviatura **OMC** se usan
+> indistintamente (`omc` es el comando).
+>
 > `omc` (paquete `pip install odoo-manager-compose`) — Odoo Manager Compose: crea, opera y migra
 > instancias Odoo con docker-compose. Versiones Odoo 17 / 18 / 19, entornos desarrollo / producción.
 >
@@ -81,7 +84,7 @@ addons_path = /mnt/extra-addons/custom,/mnt/extra-addons,/mnt/extra-addons/adhoc
 | Aspecto | desarrollo | producción |
 |---|---|---|
 | `restart` | `no` (no vuelve solo) | `always` |
-| odoo | `--dev=all`, workers 0, 8072 expuesto | workers 4 + límites, `proxy_mode` si hay nginx |
+| odoo | `--dev=all`, workers 0, 8072 expuesto | workers `2CPU+1` (tope 16) + límites, `proxy_mode` si hay nginx |
 | postgres | liviano (128MB shared_buffers, 50 conn) | tuneado (256MB, 100 conn, `command:`) |
 | recursos | 1 CPU / 2G odoo | 2 CPU / 4G odoo (+ límites en db y nginx) |
 | web | directa en `ODOO_PORT` | nginx + certbot opcional por dominio |
@@ -92,7 +95,8 @@ addons_path = /mnt/extra-addons/custom,/mnt/extra-addons,/mnt/extra-addons/adhoc
 ## 2. Requisitos
 
 - Python 3.10+, Git y Docker con plugin compose (`docker compose version`).
-- Para repos privados https: `export GITHUB_TOKEN=...` (nunca se guarda en archivos).
+- Para repos privados https: `export GITHUB_TOKEN=...` (por env nunca se guarda;
+  el menú 7 puede guardarlo en `~/.config/omc/config.json` 0600, jamás en proyectos).
 - Puertos libres en el host (el asistente los valida y sugiere libres).
 
 ---
@@ -107,7 +111,7 @@ omc     # sin flags abre el menú:
 #   3) Instalacion dependencias Localizacion Argentina
 #   4) Configurar web nginx + certbot [prod]
 #   5) Configurar rclone / Google Drive [prod]
-#   6) Ver monitor web (pide puerto: localhost:PUERTO o IP:PUERTO en VPS)
+#   6) Ver monitor web (muestra URL y token del servicio; si no hay, los pide)
 #   7) Configurar GitHub (token + org)
 #   8) Backup manual [prod]
 #   9) Restaurar BD [prod] (guiado: local/Drive, doble confirmación)
@@ -240,7 +244,7 @@ omc addons catalog-add --org adhoc --repo account-financial-tools \
 ```bash
 omc addons add --repo MiRepo --url https://github.com/MiOrg/MiRepo --branch 18.0 mi_mod
 # SSH vale igual: --url git@github.com:MiOrg/MiRepo.git
-export GITHUB_TOKEN=ghp_xxx   # privados https (solo memoria, jamás en archivos)
+export GITHUB_TOKEN=ghp_xxx   # privados https (por env: solo memoria, jamás en el proyecto)
 ```
 
 ### 5.4bis GitHub: token + tu org/usuario (menú 7, o `omc github`)
@@ -270,6 +274,7 @@ y ofrece correr `sync` (deps + Dockerfile con
 m2crypto/SECLEVEL/cache + rebuild). Además genera `scripts/parametros_ar.sh`
 (idempotente: crea `ir.config_parameter` si no existen, hoy `report.url`
 → `http://localhost:8069` y `afip.ws.env.type` → `homologation`) y ofrece fijarlos si ya hay BD creada.
+Acordate de pasar `afip.ws.env.type` a `produccion` cuando factures de verdad.
 En la creación ya no se pregunta localización:
 ahí solo se crea el proyecto (los módulos van por opción 2/3 después).
 Avanzado sin menú: `--localizacion argentina-adhoc` o `argentina-codize`. Tu flujo manual queda horneado en el Dockerfile:
@@ -311,10 +316,9 @@ Notas:
   y actualizan `addons_path`.
 - `deps` cruza el `depends` con lo descargado + repos clonados + nativos de
   `github.com/odoo/odoo/tree/<ver>/addons` (caché 30 días; manda sobre contenedor/lista).
-  Si no está ahí, **no es nativo**: `ok`, `base`, `mismo-repo` o `falta` con comando exacto.
-  Nativos = unión de árbol GitHub + contenedor + lista estática (si el API rate-limitea,
-  avisa y degrada).
-  Estados: `ok`, `base`, `mismo-repo` (candidato a `--fix`) o `falta`.
+  Si no está ahí, **no es nativo**: `ok`, `base`, `mismo-repo` (candidato a `--fix`)
+  o `falta`, con comando exacto. Nativos = unión de árbol GitHub + contenedor +
+  lista estática (si el API rate-limitea, avisa y degrada).
   Con contenedor apagado lo no descargado sale `base?` sin confirmar (sin sugerencias falsas).
   Lo que falta se busca en el catálogo vía API GitHub (caché en `~.cache`, respeta `GITHUB_TOKEN`)
   y sugiere el comando exacto; `--fix` lo trae solo. `--fix` hace loop (cadenas A→B→C).
@@ -442,13 +446,16 @@ docker compose run --rm certbot renew && docker compose exec nginx nginx -s relo
 ### 9.2 Backups y restore (+ Drive) [solo prod: dev no lleva scripts]
 
 ```bash
-./scripts/backup.sh <nombre_bd>   # dump -Fc + filestore, rotación day1..day7, validado
+./scripts/backup.sh <nombre_bd>   # dump -Fc + filestore, rotación day1..day7 + copia dominical, validado
 ./scripts/restore.sh             # 100% guiado: local o Drive, doble confirmación, verifica
+# Retención: 7 diarios (day1..day7) + 4 domingos (week0..week3, local y Drive).
+# Probá el restore cada tanto en una BD de prueba: backup sin restore testeado no es backup.
 # Sin BD, backup.sh lista y eliges. Respalda rclone.conf en backups/.
 # restore.sh levanta db solo si hace falta (sirve en servidor nuevo) y acepta
 # backups de instalaciones desde fuente: si no puede DROP+CREATE, restaura con
 # pg_restore --clean --if-exists sobre la BD existente.
-# Sin BD, backup.sh lista y eliges. Respalda rclone.conf en backups/.
+# El .gitignore generado ignora backups/, letsencrypt/, certbot-www/ y
+# scripts/rclone.conf: los tokens nunca se commitean por default.
 # Rclone: host si está, si no el servicio `rclone` del compose (perfil backup).
 # Rclone sale del compose (servicio `rclone`, perfil `backup`): **nada que instalar en host**.
 # Menú 5 lo configura (incluso dentro del servicio) y verifica el remote.
@@ -462,8 +469,9 @@ y tuning Postgres (`PG_*` en `.env`, aplicado como `command:` al contenedor db).
 En prod pregunta **vCPUs y RAM del VPS** (sugiere lo local) y reparte: sistema+nginx fijos,
 odoo ~70%CPU/62%RAM, db resto; PG 20%/50% (shared topado al 60% del límite del
 contenedor db para no OOMear en VPS chicos) y workers `2CPU+1` (en `.env` queda `VPS_*`).
-`odoo.conf` lleva los límites escalados: `limit_memory_soft` = RAM_odoo/workers
-(piso 256MB), `limit_memory_hard` = soft×1.5 (antes fijos 2GB/2.5GB).
+`odoo.conf` lleva los límites escalados: `limit_memory_soft` = RAM_odoo/(workers+2)
+(cron + longpolling incluidos; piso 256MB), `limit_memory_hard` = soft×1.25
+(regla foro Odoo "Server specifications": 1 worker ~= 6 usuarios concurrentes).
 Avanzado sin menú: `--vcpus`, `--ram-gb`, `--odoo-cpus/mem`, `--db-cpus/mem`.
 
 ### 9.4 Duplicar instancia (módulos + datos)
@@ -540,12 +548,6 @@ docker compose exec db pg_dump -U odoo postgres > backup.sql
 | Síntoma | Causa | Fix |
 |---|---|---|
 | `Bind 0.0.0.0:8072 failed: port is already allocated` | Otro proyecto dev usa ese puerto host | El asistente valida y asigna libres (`ODOO_GEVENT_PORT`); ver `docker ps` |
-| `FATAL: database "odoo" does not exist` cada 10s | Healthcheck `pg_isready -U odoo` sin `-d` (conecta a BD `odoo`) | Ya lleva `-d postgres` en plantillas; `up -d` para aplicar |
-| `ERROR: column "name" does not exist` en `ir_cron` | El monitor pedía `name`; en Odoo 18 es `cron_name` | Monitor detecta la columna (reinícialo para tomar el fix) |
-| `externally-managed-environment` (PEP 668) | Imagen Odoo = Debian 12 | Dockerfile ya lleva `--break-system-packages` |
-| `Cannot find command 'git'` en build | Dep con URL `git+https`, imagen sin git | Dockerfile ya instala git por apt |
-| `couldn't write the config file` | `odoo.conf` montado `:ro` | Montar sin `:ro` (ya en plantillas) |
-| `logfile reads 'False' ... skip` (Odoo 19) | `logfile` no acepta booleano | Sin línea `logfile` (= stdout, ya en plantillas) |
 | `invalid addons directory '/mnt/extra-addons'` | `addons/` vacío | Inofensivo; desaparece al agregar módulos |
 | `missing --http-interface` (Odoo 19) | Aviso, default cambia en 20.0 | `http_interface = 0.0.0.0` en plantilla |
 | `pysimplesoap` 1.8.14 vs `pyafipws` (quiere `==1.8.22`) | Requirements de Codize pinean `stable_py3k` (viejo) | El asistente fuerza `pysimplesoap==1.8.22` si hay pyafipws; regenera con `check-deps` |
@@ -554,6 +556,9 @@ docker compose exec db pg_dump -U odoo postgres > backup.sql
 | git pide `Username/Password` en loop (o `Authentication failed`) | Privado sin token válido (o expirado/sin scope) | Menú 7 (validar token, scope `repo`/Contents, org = tu usuario) o `export GITHUB_TOKEN=...`; git ya no pregunta, falla rápido con el motivo |
 | Módulo NO existe en repo@rama | Nombre mal o sin esa rama (u org equivocado) | Se omite sin guardar; re-listar (el `--org` manda) |
 | Deploy "colgado" | Primer build tarda (pull + pip) sin salida | Progreso ahora en vivo; esperar o revisar `docker ps` |
+
+Filas ya resueltas en plantillas/código (pg `-d postgres`, `cron_name`, PEP 668,
+git por apt, `odoo.conf` sin `:ro`, sin `logfile` en 19): ver [CHANGELOG.md](CHANGELOG.md).
 
 ---
 
@@ -570,7 +575,7 @@ requirements.txt              # runtime (flask + gunicorn) para `pip install -r`
 deploy-vps.sh                 # instalación nativa en VPS (venv + systemd, idempotente)
 tests/                        # suite pytest (29 tests)
 src/omc/monitor/              # monitor Flask solo-lectura (lo sirve `omc-monitor`)
-Manual-omc.md                 # este manual
+Manual-OMC.md                 # este manual
 <nombre>/                     # TUS proyectos viven aquí (~/odoo-manager-compose/<nombre> o $OMC_HOME)
 ```
 
@@ -594,14 +599,25 @@ omc-monitor --port 8765 --token MI_TOKEN_LARGO
 omc-monitor --port 8765 --fondo              # fondo, libera la terminal
 omc-monitor --estado                         # ver si corre
 omc-monitor --stop                           # detenerlo
-# VPS: omc-monitor --host 0.0.0.0 --token MI_TOKEN_LARGO  (nunca sin token)
-# o env: ODOO_WEB_TOKEN=... omc-monitor --host 0.0.0.0
 ```
 El menú 6 del asistente (`omc` sin args) es la vía normal; lo de arriba son atajos directos.
 
+Acceso remoto, de más a menos seguro:
+
+1. **Túnel SSH (recomendado)**: el monitor queda en `127.0.0.1` y entrás por
+   `ssh -L 8765:localhost:8765 usuario@vps`, abriendo `http://localhost:8765`
+   (el token se pide igual). Nada expuesto a internet.
+2. **Detrás de nginx con HTTPS**: reverse-proxy a `127.0.0.1:8765` con TLS.
+3. **Directo `0.0.0.0` (último recurso)**: solo con token largo, sabiendo que el
+   token viaja en claro sin TLS:
+```bash
+# o env: ODOO_WEB_TOKEN=... omc-monitor --host 0.0.0.0
+omc-monitor --host 0.0.0.0 --token MI_TOKEN_LARGO  # nunca sin token ni sin TLS
+```
+
 - Pestañas: **Proyectos** (versión, puerto, dominio, `x/y en marcha` + visor de logs por
   servicio con auto-refresh) y **Contenedores** (`docker ps` global con auto-refresh).
-- Una sola landing **Odoo Creator Compose — Monitor**: proyectos + contenedores + logs
+- Una sola landing **Odoo Manager Compose — Monitor**: proyectos + contenedores + logs
   (sin pestañas). Tema claro/oscuro: marfil `#ECDFD2`/gris `#CCCACC`/negro y blanco,
   primario `#5F3475`, acento `#893172`.
 - **Métricas** por proyecto (auto 20s, todo solo-lectura): conexiones PG vs `max_connections`,
@@ -643,8 +659,12 @@ ln -sf ~/.venv/omc/bin/omc-monitor ~/.local/bin/omc-monitor
 Los paquetes de migración OCA (`odoo-module-migrator`, `openupgradelib`) no se
 preinstalan: `omc migrar` ofrece bajarlos con pip si faltan (con `--yes`, solos).
 
-**Distribución:** `pip install odoo-manager-compose` (cuando se publique) o clon + venv.
+**Distribución:** `pip install odoo-manager-compose` (cuando se publique), clon + venv,
+o directo sin clonar: `pip install "git+https://github.com/berisoft-arg/odoo-manager-compose.git"`.
 Sin imagen Docker: `omc` corre nativo y controla el Docker del host para los proyectos.
+
+**Actualizar:** `cd ~/odoo-manager-compose && git pull && ./deploy-vps.sh`
+(reutiliza token y raíces; ver §17). **Licencia:** AGPL-3.0 (`LICENSE` en el repo).
 
 ---
 
@@ -705,10 +725,10 @@ cd ~/odoo-manager-compose && ./deploy-vps.sh
 
 Raíces custom: `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh` (datos y proyectos).
 
-Paso 3 — verificar:
+Paso 3 — verificar (OMC sin subcomando abre el menú 1-10):
 
 ```bash
-omc --version && omc list   # `omc` pelado abre el menú 1-10
+omc --version && omc list
 ```
 
 Instalación nativa (venv aislado + monitor como servicio, sin Docker para `omc`):
@@ -731,7 +751,7 @@ el servicio; se consulta en la opción 6, nunca se imprime), y habilita
 
 Raíz de proyectos (`list`/`doctor`/`elegir`/monitor la escanean):
 `$OMC_PROJECTS` → `$OMC_HOME` (compat) → `~/odoo-manager-compose` existente →
-`~/odoo-create` existente → `/opt`. Datos: `$OMC_HOME` → legados → `/opt/omc`.
+`~/odoo-create` existente (nombre anterior, solo migración) → `/opt`. Datos: `$OMC_HOME` → legados → `/opt/omc`.
 `crear` genera en `<proyectos>/<nombre>` (pregunta `Carpeta del proyecto` en el
 menú; `--salida` manda; sin permiso sale con la instrucción de sudo único).
 
@@ -740,7 +760,7 @@ token del monitor existente (rota solo si exportás `ODOO_WEB_TOKEN` nuevo),
 limpia sola la función `omc()` del experimento Docker si quedó en `~/.bashrc`,
 y agrega `~/.local/bin` a tu `PATH` si falta (abrí shell nuevo después).
 
-Variables: `REPO_DIR`, `VENV_DIR`, `OMC_HOME`,
+Variables: `REPO_DIR`, `VENV_DIR`, `OMC_HOME`, `OMC_PROJECTS`,
 `MONITOR_PORT` (8765), `MONITOR_HOST` (127.0.0.1), `ODOO_WEB_TOKEN`.
 
 ```bash

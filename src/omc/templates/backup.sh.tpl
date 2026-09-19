@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Backup {{PROYECTO}} — rotación semanal + validaciones + rclone a Drive.
+# Backup {{PROYECTO}} — rotación day1..day7 + copia dominical + validaciones + rclone a Drive.
 # Uso: ./scripts/backup.sh [nombre_bd]   (ej: ./scripts/backup.sh midb)
 # Sin argumento y con terminal: lista las bases y eliges.
 # Crontab sugerido: 0 3 * * * cd /ruta/{{PROYECTO}} && ./scripts/backup.sh <bd> >> backups/cron.log 2>&1
@@ -34,6 +34,7 @@ fi
 
 DIA=$(date +%u)  # 1 (lunes) a 7 (domingo): 7 generaciones rotando
 DEST="backups"
+WEEK=""  # ruta de la copia dominical (solo DIA=7)
 mkdir -p "$DEST"
 SLUG=$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-_')
 DB_DUMP="$DEST/${BD}_db_day${DIA}.dump"
@@ -70,6 +71,13 @@ fi
 tar -czf "$FULL" -C "$DEST" "$(basename "$DB_DUMP")" "$(basename "$FS_TAR")"
 rm -f "$DB_DUMP" "$FS_TAR"
 
+# --- 4b. Copia dominical (red más allá de day1..day7: se conservan 4 domingos) ---
+if [ "$DIA" = "7" ]; then
+  WEEK="$DEST/full_backup_${BD}_week$((10#$(date +%V) % 4)).tar.gz"
+  cp "$FULL" "$WEEK"
+  echo "(copia dominical en $WEEK: se conservan 4 domingos)"
+fi
+
 # --- 5. Respaldo de la config de rclone (para descargarla/reponerla) ---
 # Copia ~/.config/rclone/rclone.conf — sin esto no hay restore desde Drive en otra máquina.
 if [ -f "$HOME/.config/rclone/rclone.conf" ]; then
@@ -92,6 +100,12 @@ RCLONE="docker compose --profile backup run --rm rclone"
 if $RCLONE copy /data "$REMOTE:{{PROYECTO}}/" \
     --include "full_backup_${BD}_day${DIA}.tar.gz" --no-check-dest; then
   echo "Subida OK."
+  if [ -n "${WEEK:-}" ] && [ -f "$WEEK" ]; then
+    $RCLONE copy /data "$REMOTE:{{PROYECTO}}/" \
+      --include "$(basename "$WEEK")" --no-check-dest \
+      && echo "Subida dominical OK." \
+      || echo "AVISO: falló la subida dominical (el local quedó bien)."
+  fi
 else
   echo "ERROR: falló la subida a Drive (el local quedó bien; revisa rclone.conf)." >&2
   exit 1

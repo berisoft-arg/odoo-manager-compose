@@ -3,7 +3,7 @@
 Crea, opera y migra instancias **Odoo 17 / 18 / 19** con docker-compose.
 Asistente interactivo + CLI + monitor web + migración OCA entre versiones.
 
-> Documentación completa en [Manual-omc.md](Manual-omc.md).
+> Documentación completa en [Manual-OMC.md](Manual-OMC.md).
 
 ## Qué hace
 
@@ -23,15 +23,15 @@ Asistente interactivo + CLI + monitor web + migración OCA entre versiones.
 - **Migración OCA** (`omc migrar`): etapa 1 código (`odoo-module-migrator`,
   clasifica migrado/sin-migrar/custom sin mutar el proyecto), etapa 2 BD
   (OpenUpgrade + `docker-compose.migrate.yml`), con backup previo siempre.
-- **Backup/restore**: dump PostgreSQL + filestore, local o Drive, con doble
-  confirmación al restaurar.
+- **Backup/restore**: dump PostgreSQL + filestore, local o Drive (+ copia dominical),
+  con doble confirmación al restaurar.
 - **Multi-instancia**: puertos validados y sugeridos libres, `ODOO_GEVENT_PORT`,
   `omc list` / `omc doctor [--fix]`.
 
 ## Requisitos
 
 Python 3.10+, Git, Docker con plugin compose. Para repos privados en https:
-`export GITHUB_TOKEN=...` (solo memoria, nunca se guarda).
+`export GITHUB_TOKEN=...` (por env nunca se guarda; el menú 7 puede guardarlo en `~/.config`, jamás en proyectos).
 
 ## Instalación
 
@@ -57,86 +57,27 @@ cd ~/odoo-manager-compose && ./deploy-vps.sh
 
 Raíces custom: `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh` (datos y proyectos).
 
-Paso 3 — verificar:
+Paso 3 — verificar (OMC sin subcomando abre el menú 1-10):
 
 ```bash
-omc --version && omc list   # `omc` pelado abre el menú 1-10
+omc --version && omc list
+# monitor sin login: el deploy activa linger solo (si avisa: sudo loginctl enable-linger $USER)
 ```
 
-**En Debian / Ubuntu — cualquier entorno (desde cero):**
+Detalles, venv manual y otras vías: ver [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker).
+
+## Uso rápido: el menú básico (1-10, 0 sale)
 
 ```bash
-# 1) Sistema base
-sudo apt update
-sudo apt install -y python3 python3-venv python3-pip git curl
-
-# 2) Docker oficial (si ya tenés docker compose, deploy-vps.sh lo saltea y lo respeta)
-#    Si no está, deploy-vps.sh instala el repo oficial solo (nunca docker.io).
-#    Manual alternativo (repo oficial): https://docs.docker.com/engine/install/ubuntu/
-#    Luego: re-login o `newgrp docker` por el grupo docker.
-
-# 3) Bajar OMC (en home, nunca dentro de /opt donde viven los proyectos)
-git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose
-cd ~/odoo-manager-compose
-
-# 4) Instalar (venv aislado + monitor systemd) — idempotente, se puede re-ejecutar para actualizar
-./deploy-vps.sh
-# Opcionales: OMC_PROJECTS=... OMC_HOME=... MONITOR_PORT=8765 ./deploy-vps.sh
-#            ODOO_WEB_TOKEN=... ./deploy-vps.sh  # si no, se genera y guarda en el servicio (ver opción 6)
-
-# 5) Verificar
-~/.local/bin/omc --version   # lee src/omc/__init__.py
-omc                          # abre el menú interactivo (1-10, 0 salir)
-systemctl --user status omc-monitor
-# Para que arranque sin login: sudo loginctl enable-linger $USER
-# Actualizar: cd ~/odoo-manager-compose && git pull && ./deploy-vps.sh
+omc                 # abre el menú
 ```
 
-**Desde Git (pip, recomendado en otro venv):**
+1 crear proyecto · 2 descargar módulos · 3 localizar AR · 4 web nginx+TLS ·
+5 rclone/Drive · 6 monitor · 7 GitHub · 8 backup · 9 restore · 10 migrar OCA.
+Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup.
 
-```bash
-pip install "git+https://github.com/berisoft-arg/odoo-manager-compose.git"
-```
-
-Los paquetes de migración OCA se instalan a demanda: `omc migrar` los ofrece
-bajar con pip si faltan (sin flags extra en la instalación).
-
-**En venv aislado (manual, sin deploy-vps.sh):**
-
-```bash
-python3 -m venv ~/.venv/omc
-~/.venv/omc/bin/pip install -r requirements.txt   # runtime: flask + gunicorn
-~/.venv/omc/bin/pip install --no-deps .
-ln -sf ~/.venv/omc/bin/omc ~/.local/bin/omc
-ln -sf ~/.venv/omc/bin/omc-monitor ~/.local/bin/omc-monitor
-```
-
-**En VPS (producción):** clonar y correr `./deploy-vps.sh` — crea el venv,
-instala, deja symlinks, genera token y habilita `omc-monitor` como servicio
-systemd de usuario. Si `docker compose` ya está instalado lo respeta; si falta
-lo instala del repo oficial (Debian/Ubuntu con `apt` + `sudo`, nunca `docker.io`). Ver [Manual §17](Manual-omc.md#17-vps-con-deploy-vpssh).
-
-**Desarrollo:**
-
-```bash
-pip install -e .
-omc       # abre el menú interactivo
-```
-
-## Uso rápido
-
-```bash
-omc                 # menú: crear, localizar, addons, nginx, rclone, monitor,
-                    #        github, backup, restore, migrar
-omc crear --nombre mi-tienda --version 18 --entorno produccion
-omc addons add --repo server-tools --org oca --odoo 18 auditlog
-omc addons bundle addons-bundle.json --odoo 18
-omc addons sync
-omc localizar --proyecto /opt/mi-tienda
-omc monitor
-omc doctor --fix
-omc migrar
-```
+Menú avanzado (subcomandos directos como `omc crear --flags`,
+`omc doctor --fix`): ver [Manual-OMC](Manual-OMC.md).
 
 ## Estructura del repo
 
@@ -150,7 +91,8 @@ src/omc/monitor/    # monitor Flask solo-lectura (lo sirve `omc-monitor`)
 tests/              # suite pytest
 requirements*.txt   # runtime (+migración) para pip install en venv
 deploy-vps.sh       # instalación nativa en VPS (venv + systemd)
-Manual-omc.md       # documentación completa
+Manual-OMC.md        # documentación completa
+CHANGELOG.md         # historial
 ```
 
 ## Licencia

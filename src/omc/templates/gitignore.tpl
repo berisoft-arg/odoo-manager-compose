@@ -2,3 +2,8 @@
 *.pyc
 __pycache__/
 *.log
+backups/
+letsencrypt/
+certbot-www/
+scripts/rclone.conf
+rclone.conf.bak

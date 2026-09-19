@@ -258,7 +258,7 @@ def _proj_loc(tmp_path):
     return p
 
 
-def test_aplicar_guarda_repo_requirements(monkeypatch, tmp_path):
+def test_aplicar_guarda_repo_requirements(monkeypatch, tmp_path, capsys):
     import json as _json
     import omc.flows as F
     monkeypatch.setattr(F, "instalar_addon", lambda *a, **k: True)
@@ -269,6 +269,7 @@ def test_aplicar_guarda_repo_requirements(monkeypatch, tmp_path):
     assert loc["repo_requirements"] == REQS_AR_17
     sc = p / "scripts" / "parametros_ar.sh"
     assert sc.exists() and "report.url" in sc.read_text(encoding="utf-8")
+    assert "homologación" in capsys.readouterr().out  # recuerda pasar a producción
 
 
 def test_bloques_fusiona_repo_requirements(tmp_path):
@@ -383,6 +384,18 @@ def test_compose_nginx_block_monta_gzip_y_sitio():
     assert "./nginx/nginx.conf:/etc/nginx/conf.d/odoo.conf:ro" in out
     assert "./nginx/gzip.conf:/etc/nginx/conf.d/gzip.conf:ro" in out
     assert "default.conf" not in out
+
+
+def test_backup_tpl_retencion_semanal():
+    import subprocess as _sp
+    from omc.core import template_text, sin_renderizar
+    out = template_text("backup.sh.tpl").replace("{{PROYECTO}}", "demo")
+    assert sin_renderizar(out) == []
+    assert "week$((10#$(date +%V) % 4))" in out  # 4 domingos rotando
+    assert "Subida dominical OK." in out
+    r = _sp.run(["bash", "-n", "/dev/stdin"], input=out, text=True,
+                stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, timeout=15)
+    assert r.returncode == 0
 
 
 def test_restore_tpl_cubre_fuente_externa():

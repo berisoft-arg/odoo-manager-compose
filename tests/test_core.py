@@ -79,12 +79,12 @@ def test_templates_render_sin_residuos():
 
 def test_reparto_limites_memoria():
     r = reparto_vps(4, 8, con_nginx=True)
-    # odoo 4.5GB / 9 workers -> soft 512MB, hard 1.5x
-    assert r["ODOO_LIMIT_SOFT"] == str(512 * 1024**2)
-    assert r["ODOO_LIMIT_HARD"] == str(int(512 * 1024**2 * 1.5))
+    # odoo 4.5GB / (9 workers + cron + longpolling) -> soft 418MB, hard 1.25x (foro Odoo)
+    assert r["ODOO_LIMIT_SOFT"] == "439258018"
+    assert r["ODOO_LIMIT_HARD"] == "549072522"
     r2 = reparto_vps(2, 2, con_nginx=True)
-    assert int(r2["ODOO_LIMIT_SOFT"]) >= 256 * 1024**2  # piso VPS chicos
-    assert int(r2["ODOO_LIMIT_HARD"]) == int(int(r2["ODOO_LIMIT_SOFT"]) * 1.5)
+    assert r2["ODOO_LIMIT_SOFT"] == str(256 * 1024**2)  # piso VPS chicos
+    assert r2["ODOO_LIMIT_HARD"] == str(int(256 * 1024**2 * 1.25))
 
 
 def _limpiar_env(monkeypatch, home):
@@ -137,6 +137,16 @@ def test_asegurar_escribible_ok_y_falla(monkeypatch, tmp_path):
         assert "sudo" in str(e.value.code)
     finally:
         ro.chmod(0o755)
+
+
+def test_gitignore_cubre_secretos(tmp_path):
+    from omc.core import template_text, sin_renderizar
+    out = template_text("gitignore.tpl")
+    assert sin_renderizar(out) == []
+    lineas = [l.strip() for l in out.splitlines() if l.strip()]
+    for req in (".env", "backups/", "letsencrypt/", "certbot-www/",
+                "scripts/rclone.conf", "rclone.conf.bak"):
+        assert req in lineas  # nada con tokens commiteado por default
 
 
 def test_run_list_ve_proyectos_en_root(monkeypatch, tmp_path, capsys):

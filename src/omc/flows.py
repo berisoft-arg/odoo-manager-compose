@@ -402,6 +402,8 @@ def aplicar_localizacion(salida: Path, version: str, perfil_key: str,
     print("  ✓ addons/localizacion.json guardado (apt/SECLEVEL/cache van al Dockerfile).")
     script_params = _escribir_parametros_ar(salida)
     print(f"  ✓ {script_params.name} generado (crea parámetros AR si no existen).")
+    print("  → AFIP arranca en homologación (afip.ws.env.type): pasalo a producción")
+    print("    cuando factures de verdad (parametros_ar.sh / parámetros de la compañía).")
     if ofrecer_aplicar and es_interactivo():
         from types import SimpleNamespace
 

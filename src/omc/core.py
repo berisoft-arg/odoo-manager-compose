@@ -408,7 +408,10 @@ def reparto_vps(vcpus: float, ram_gb: float, con_nginx: bool) -> dict:
     Tuning Postgres: shared_buffers 20% del total, effective_cache 50%.
     shared_buffers además se topa al 60% del límite del contenedor db
     (en VPS chicos el 20% del total excedería el cgroup y OOMea).
-    Workers Odoo: 2CPU+1.
+    Workers Odoo: 2CPU+1 (tope 16). Límites por worker sobre workers+2
+    (cron + longpolling, que el reparto ingenuo ignora): soft = RAM/(N+2),
+    hard = soft x 1.25 (regla foro Odoo "Server specifications": 1 worker ~=
+    6 usuarios concurrentes, soft 2000MB x workers <= RAM).
     """
     cpu = max(vcpus - 0.5, 0.5)
     mem = max(ram_gb - 0.5, 1.0)
@@ -421,8 +424,9 @@ def reparto_vps(vcpus: float, ram_gb: float, con_nginx: bool) -> dict:
     db_mb = db_mem * 1024
     workers_n = min(int(2 * vcpus + 1), 16)
     # Límites de memoria por worker (bytes): la RAM de odoo repartida en partes
-    # iguales; soft recicla con gracia, hard mata (1.5x). Piso 256MB para VPS chicos.
-    _soft = max(int(odoo_mem * 1024**3) // workers_n, 256 * 1024**2)
+    # iguales entre workers + cron + longpolling; soft recicla con gracia, hard
+    # mata (1.25x, foro Odoo). Piso 256MB para VPS chicos.
+    _soft = max(int(odoo_mem * 1024**3) // (workers_n + 2), 256 * 1024**2)
     return {
         "ODOO_CPUS": str(odoo_cpus), "ODOO_MEM": fmt_mem(odoo_mem * 1024),
         "ODOO_CPUS_RES": str(round(odoo_cpus / 2, 2)), "ODOO_MEM_RES": fmt_mem(round(odoo_mem / 2, 1) * 1024),
@@ -435,7 +439,7 @@ def reparto_vps(vcpus: float, ram_gb: float, con_nginx: bool) -> dict:
         "PG_MAX_CONN": "100",
         "ODOO_WORKERS": str(workers_n),
         "ODOO_LIMIT_SOFT": str(_soft),
-        "ODOO_LIMIT_HARD": str(int(_soft * 1.5)),
+        "ODOO_LIMIT_HARD": str(int(_soft * 1.25)),
     }
 
 
