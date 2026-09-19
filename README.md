@@ -34,17 +34,28 @@ Python 3.10+, Git, Docker con plugin compose. Para repos privados en https:
 
 ## Instalación
 
-**Instalación express en un VPS nuevo (dos pegadas):**
+**Instalación express en un VPS nuevo (tres pasos, un bloque por pegada):**
+
+Paso 1 — base + docker + grupo:
 
 ```bash
-# 1) base + docker + grupo (después: re-logueate o `newgrp docker`)
 sudo apt update && sudo apt install -y python3 python3-venv git curl docker.io docker-compose-plugin
 sudo usermod -aG docker $USER
-# 2) datos + omc (todo de una; datos estándar en /opt/odoo)
-sudo mkdir -p /opt/odoo && sudo chown $(id -u):$(id -g) /opt/odoo \
-&& git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose \
-&& cd ~/odoo-manager-compose && OMC_HOME=/opt/odoo ./deploy-vps.sh
-# 3) verificar
+```
+
+Re-logueate (o `newgrp docker`) antes de seguir.
+
+Paso 2 — datos + omc (datos estándar en /opt/odoo):
+
+```bash
+sudo mkdir -p /opt/odoo && sudo chown $(id -u):$(id -g) /opt/odoo
+git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose
+cd ~/odoo-manager-compose && OMC_HOME=/opt/odoo ./deploy-vps.sh
+```
+
+Paso 3 — verificar:
+
+```bash
 omc --version && omc list   # `omc` pelado abre el menú 1-10
 ```
 
