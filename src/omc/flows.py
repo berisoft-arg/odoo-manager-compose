@@ -2065,7 +2065,7 @@ def menu_principal() -> str:
         ("salir", "Salir"),
     ]
     print("=== Odoo Manager Compose ===")
-    print("¿Qué quiere hacer?")
+    print("¿Qué quiere hacer?  (Tip: URL y token del monitor en la opción 6)")
     labels = [v for _k, v in acciones if _k != "salir"]
     for i, lab in enumerate(labels, 1):
         print(f"  {i}) {lab}")
@@ -2220,10 +2220,48 @@ def _monitor_cmd() -> list:
     return [sys.executable, "-m", "omc.webapp"]
 
 
+def _monitor_service_info():
+    """Lee el unit systemd del monitor: token/puerto/host reales + estado.
+
+    Devuelve dict o None si no hay unit. Nunca falla (sin systemd: activo=False).
+    La URL y el token del monitor SOLO se muestran en la opción 6.
+    """
+    import re
+    unit = Path.home() / ".config" / "systemd" / "user" / "omc-monitor.service"
+    try:
+        txt = unit.read_text(encoding="utf-8")
+    except OSError:
+        return None
+
+    def _env(key, default=""):
+        m = re.search(rf"^Environment={key}=(.*)$", txt, re.M)
+        return m.group(1).strip() if m else default
+
+    m = re.search(r"ExecStart=.*--port\s+(\d+)", txt)
+    port = int(m.group(1)) if m else 8765
+    m = re.search(r"ExecStart=.*--host\s+(\S+)", txt)
+    host = m.group(1) if m else "127.0.0.1"
+    activo = False
+    try:
+        r = subprocess.run(["systemctl", "--user", "is-active", "--quiet", "omc-monitor"],
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+        activo = r.returncode == 0
+    except Exception:  # noqa: BLE001
+        pass
+    return {"existe": True, "activo": activo, "host": host, "port": port,
+            "token": _env("ODOO_WEB_TOKEN")}
+
+
 def run_monitor(args):
     """Monitor web solo-lectura (contenedores + logs + métricas)."""
     _ = args
     base_cmd = _monitor_cmd()
+    info = _monitor_service_info()
+    if info and info["token"]:
+        estado = "activo" if info["activo"] else "instalado (detenido)"
+        print(f"\nMonitor del servicio: {estado}")
+        print(f"  URL:   http://{info['host']}:{info['port']}")
+        print(f"  Token: {info['token']}")
     modo = ask_opcion(
         "Monitor web (solo lectura: contenedores + logs + métricas)",
         ["Ver en esta terminal (Ctrl+C lo detiene)", "Fondo (libera la terminal)",
@@ -2236,7 +2274,7 @@ def run_monitor(args):
     if modo == "Volver":
         return
     fondo = modo == "Fondo (libera la terminal)"
-    sugerido = 8765
+    sugerido = info["port"] if info else 8765
     while True:
         port = ask_puerto("Puerto del monitor", sugerido)
         if puerto_en_uso(port):
@@ -2244,9 +2282,11 @@ def run_monitor(args):
             print(f"  ⚠ El puerto {port} está ocupado. Libre sugerido: {sugerido}")
             continue
         break
-    donde = preguntar("¿Dónde lo ve?", "local", ["local", "vps"])
+    donde = preguntar("¿Dónde lo ve?", "vps" if info and info["host"] != "127.0.0.1" else "local",
+                      ["local", "vps"])
     host = "127.0.0.1" if donde == "local" else "0.0.0.0"
-    token = preguntar("Token (vacío = generar)", secrets.token_urlsafe(16))
+    token_sugerido = info["token"] if info and info["token"] else secrets.token_urlsafe(16)
+    token = preguntar("Token (vacío = sugerido)", token_sugerido)
     if donde == "local":
         print(f"\nAbra http://localhost:{port}  (token: {token})")
     else:

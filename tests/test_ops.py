@@ -17,7 +17,10 @@ from omc.flows import (
     run_restore,
     run_web,
     run_rclone,
+    run_monitor,
+    menu_principal,
     _monitor_cmd,
+    _monitor_service_info,
     _resolver_proyecto,
 )
 from omc.addons_cli import _parse
@@ -63,6 +66,46 @@ def test_run_web_y_rclone_dev_no_ejecutan(capsys, tmp_path):
 def test_monitor_cmd_devuelve_lista():
     cmd = _monitor_cmd()
     assert isinstance(cmd, list) and cmd
+
+
+def _unit_monitor(home, token="TOK-SERVICIO-123", port=8765, host="127.0.0.1"):
+    d = home / ".config" / "systemd" / "user"
+    d.mkdir(parents=True)
+    (d / "omc-monitor.service").write_text(
+        "[Service]\nEnvironment=OMC_HOME=/opt/omc\n"
+        f"Environment=ODOO_WEB_TOKEN={token}\n"
+        f"ExecStart=/root/.venv/omc/bin/omc-monitor --host {host} --port {port}\n",
+        encoding="utf-8")
+
+
+def test_monitor_service_info_lee_unit(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    assert _monitor_service_info() is None  # sin unit
+    _unit_monitor(tmp_path, port=9999)
+    monkeypatch.setattr("omc.flows.subprocess.run",
+                        lambda *a, **k: SimpleNamespace(returncode=0))
+    info = _monitor_service_info()
+    assert info["token"] == "TOK-SERVICIO-123" and info["port"] == 9999
+    assert info["host"] == "127.0.0.1" and info["activo"] is True
+
+
+def test_run_monitor_muestra_servicio_y_vuelve(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _unit_monitor(tmp_path)
+    monkeypatch.setattr("omc.flows.subprocess.run",
+                        lambda *a, **k: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "4")  # Volver
+    run_monitor(SimpleNamespace())
+    out = capsys.readouterr().out
+    assert "TOK-SERVICIO-123" in out and "8765" in out
+
+
+def test_menu_principal_muestra_tip_monitor(monkeypatch, capsys):
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "0")
+    assert menu_principal() == "salir"
+    assert "opción 6" in capsys.readouterr().out
 
 
 def test_resolver_proyecto_rechaza_sin_compose(tmp_path):

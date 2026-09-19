@@ -12,7 +12,8 @@
 #   OMC_PROJECTS=...   raíz de proyectos (default: /opt → /opt/<proyecto>)
 #   MONITOR_PORT=...   puerto del monitor (default: 8765)
 #   MONITOR_HOST=...   bind del monitor (default: 127.0.0.1; VPS público: reverse-proxy TLS)
-#   ODOO_WEB_TOKEN=... token del monitor (default: se genera y se muestra UNA vez)
+#   ODOO_WEB_TOKEN=... token del monitor (default: se guarda en el servicio;
+#   se consulta en omc opción 6, nunca se imprime acá)
 #
 # Idempotente: se puede correr de nuevo para actualizar (reinstala en el venv + reinicia).
 set -euo pipefail
@@ -154,7 +155,7 @@ else
   else
     ODOO_WEB_TOKEN="$("$VENV_DIR/bin/python" -c 'import secrets; print(secrets.token_urlsafe(32))')"
     GENERADO=1
-    ORIGEN_TOKEN="generado ahora; guardalo, no se muestra más"
+    ORIGEN_TOKEN="generado y guardado en el servicio"
   fi
 fi
 
@@ -207,7 +208,7 @@ echo "  OMC_HOME:   $OMC_HOME (datos)"
 echo "  Proyectos:  $OMC_PROJECTS/<nombre> (ej. $OMC_PROJECTS/mi-odoo)"
 echo "  Monitor:    http://$MONITOR_HOST:$MONITOR_PORT"
 if [ "$GENERADO" = "1" ]; then
-  echo "  Token:      $ODOO_WEB_TOKEN  ($ORIGEN_TOKEN)"
+  echo "  Token:      (generado y guardado en el servicio; verlo en omc → opción 6)"
 else
   echo "  Token:      ($ORIGEN_TOKEN)"
 fi

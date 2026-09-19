@@ -582,7 +582,11 @@ Manual-omc.md                 # este manual
 
 ## 14. Monitor web (`src/omc/monitor/app.py`, Flask, SOLO lectura)
 
-Desde el **menú opción 6** (frente/fondo/stop). Avanzado sin menú:
+Desde el **menú opción 6**: muestra la URL, el puerto y el token **reales del
+servicio** (leídos del unit systemd; si no hay servicio, los pide) y después
+ofrece frente/fondo/stop. La URL y el token **solo** se muestran acá, nunca en
+el arranque ni en el resumen del deploy (ahí solo se indica dónde verlos).
+Avanzado sin menú:
 
 ```bash
 omc-monitor                                  # http://127.0.0.1:8765 (token en consola)
@@ -721,7 +725,8 @@ El script es idempotente: verifica prerrequisitos (Python ≥3.10, `python3-venv
 docker + plugin compose, systemd de usuario), deja escribibles `/opt/omc` (datos)
 y `/opt` (proyectos) con sudo **una sola vez** (uso diario sin sudo), crea
 `~/.venv/omc`, instala `requirements.txt` + el paquete, deja symlinks en
-`~/.local/bin`, genera token si no le pasás `ODOO_WEB_TOKEN`, y habilita
+`~/.local/bin`, genera token si no le pasás `ODOO_WEB_TOKEN` (queda guardado en
+el servicio; se consulta en la opción 6, nunca se imprime), y habilita
 `omc-monitor` (`systemctl --user`).
 
 Raíz de proyectos (`list`/`doctor`/`elegir`/monitor la escanean):

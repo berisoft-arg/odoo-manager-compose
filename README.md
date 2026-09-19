@@ -18,7 +18,8 @@ Asistente interactivo + CLI + monitor web + migración OCA entre versiones.
 - **Localización Argentina**: bundle AdHoc (factura electrónica + IVA),
   `python3-m2crypto` por apt, `SECLEVEL=1`, cache de pyafipws.
 - **Monitor web** (`omc-monitor`): Flask solo-lectura del estado de instancias
-  (contenedores, cron, colas), tema claro/oscuro, token de acceso.
+  (contenedores, cron, colas), tema claro/oscuro, token de acceso (URL y token
+  solo visibles en la opción 6 del menú).
 - **Migración OCA** (`omc migrar`): etapa 1 código (`odoo-module-migrator`,
   clasifica migrado/sin-migrar/custom sin mutar el proyecto), etapa 2 BD
   (OpenUpgrade + `docker-compose.migrate.yml`), con backup previo siempre.
@@ -81,7 +82,7 @@ cd ~/odoo-manager-compose
 # 4) Instalar (venv aislado + monitor systemd) — idempotente, se puede re-ejecutar para actualizar
 ./deploy-vps.sh
 # Opcionales: OMC_PROJECTS=... OMC_HOME=... MONITOR_PORT=8765 ./deploy-vps.sh
-#            ODOO_WEB_TOKEN=... ./deploy-vps.sh  # si no, se genera uno y se muestra una vez
+#            ODOO_WEB_TOKEN=... ./deploy-vps.sh  # si no, se genera y guarda en el servicio (ver opción 6)
 
 # 5) Verificar
 ~/.local/bin/omc --version   # lee src/omc/__init__.py
