@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Odoo Manager Compose — instalación nativa en VPS (venv aislado, sin Docker para omc).
 # Uso:
-#   git clone <tu-repo> ~/odoo-manager-compose
-#   cd ~/odoo-manager-compose
+#   git clone <tu-repo> /opt/odoo-manager-compose
+#   cd /opt/odoo-manager-compose
 #   OMC_HOME=/opt/omc OMC_PROJECTS=/opt ./deploy-vps.sh   (defaults; rara vez hace falta)
 #
 # Variables (todas opcionales, con defaults sensatos):

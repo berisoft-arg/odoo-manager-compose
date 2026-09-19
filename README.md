@@ -51,8 +51,8 @@ re-login (o `newgrp docker`) por el grupo docker.
 Paso 2 — omc (el deploy prepara /opt/omc + /opt con sudo único; uso diario sin sudo):
 
 ```bash
-git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose
-cd ~/odoo-manager-compose && ./deploy-vps.sh
+git clone https://github.com/berisoft-arg/odoo-manager-compose.git /opt/odoo-manager-compose
+cd /opt/odoo-manager-compose && ./deploy-vps.sh
 ```
 
 Raíces custom: `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh` (datos y proyectos).
@@ -93,6 +93,18 @@ requirements*.txt   # runtime (+migración) para pip install en venv
 deploy-vps.sh       # instalación nativa en VPS (venv + systemd)
 Manual-OMC.md        # documentación completa
 CHANGELOG.md         # historial
+```
+
+### Dónde vive cada cosa (estándar VPS)
+
+```text
+/opt/odoo-manager-compose   # código OMC (repo; actualizar: git pull)
+~/.venv/omc                 # entorno virtual (lo crea el deploy; en home, no se mueve)
+~/.local/bin/omc            # comando (symlink; requiere PATH)
+~/.config/systemd/user/     # servicio omc-monitor (con el token, permiso 600)
+/opt/omc                    # datos OMC: OMC_HOME (catálogos editables, estado)
+/opt/<nombre>               # proyectos: OMC_PROJECTS (ej. /opt/mi-proyecto)
+~/.config/omc/              # GitHub (token opcional 0600, jamás en proyectos)
 ```
 
 ## Licencia

@@ -129,9 +129,9 @@ Abrir `http://localhost:PUERTO` y ver logs con `docker compose logs -f odoo`.
 Limpieza para reprobar (conserva imágenes):
 
 ```bash
-cd ~/odoo-manager-compose/mi-proyecto && docker compose down -v   # NO borra imágenes
+cd /opt/mi-proyecto && docker compose down -v   # NO borra imágenes
 docker ps            # vacío
-rm -rf ~/odoo-manager-compose/mi-proyecto
+rm -rf /opt/mi-proyecto
 ```
 
 > Nunca `docker rmi` ni `docker system prune -a` si quieres conservar las imágenes.
@@ -238,7 +238,7 @@ Avanzado sin menú:
 # Cargar tus enlaces al catálogo (quedan numerados en list-catalog y asistente):
 omc addons catalog-add --org adhoc --repo account-financial-tools \
   --url https://github.com/ingadhoc/account-financial-tools --desc "Adhoc finanzas"
-# O edita directo ~/odoo-manager-compose/addons-catalog.json (secciones oca/adhoc/cybrosys/mates/custom)
+# O edita directo $OMC_HOME/addons-catalog.json (default /opt/omc; secciones oca/adhoc/cybrosys/mates/custom)
 ```
 
 ```bash
@@ -341,7 +341,7 @@ Notas:
 Es la **opción 2 del menú**. Avanzado sin menú:
 
 ```bash
-cd ~/odoo-manager-compose/mi-proyecto
+cd /opt/mi-proyecto
 omc addons sync                              # instalador + deps + rebuild
 omc addons sync --bundle addons-bundle.json
 omc addons sync --yes / --no-deploy / --skip-install
@@ -552,7 +552,7 @@ docker compose exec db pg_dump -U odoo postgres > backup.sql
 | `missing --http-interface` (Odoo 19) | Aviso, default cambia en 20.0 | `http_interface = 0.0.0.0` en plantilla |
 | `pysimplesoap` 1.8.14 vs `pyafipws` (quiere `==1.8.22`) | Requirements de Codize pinean `stable_py3k` (viejo) | El asistente fuerza `pysimplesoap==1.8.22` si hay pyafipws; regenera con `check-deps` |
 | `cron connection already closed` / `Unexpected indentation` | Arranque inicial / RST | Inofensivo si la web carga |
-| `sync`: no estás en un proyecto | Se corrió desde `~/odoo-manager-compose` | `cd <proyecto>` o `--proyecto <ruta>` |
+| `sync`: no estás en un proyecto | Se corrió desde el dir del código (repo) | `cd /opt/<proyecto>` o `--proyecto <ruta>` |
 | git pide `Username/Password` en loop (o `Authentication failed`) | Privado sin token válido (o expirado/sin scope) | Menú 7 (validar token, scope `repo`/Contents, org = tu usuario) o `export GITHUB_TOKEN=...`; git ya no pregunta, falla rápido con el motivo |
 | Módulo NO existe en repo@rama | Nombre mal o sin esa rama (u org equivocado) | Se omite sin guardar; re-listar (el `--org` manda) |
 | Deploy "colgado" | Primer build tarda (pull + pip) sin salida | Progreso ahora en vivo; esperar o revisar `docker ps` |
@@ -562,7 +562,20 @@ git por apt, `odoo.conf` sin `:ro`, sin `logfile` en 19): ver [CHANGELOG.md](CHA
 
 ---
 
-## 13. Archivos del dir maestro (`~/odoo-manager-compose`)
+## 13. Dónde vive cada cosa (estándar VPS)
+
+```text
+/opt/odoo-manager-compose   # código OMC (repo; actualizar: git pull)
+/root/.venv/omc             # entorno virtual (lo crea el deploy; en home, no se mueve)
+/root/.local/bin/omc        # comando (symlink; requiere PATH)
+/root/.config/systemd/user/ # servicio omc-monitor (con el token, permiso 600)
+/opt/omc                    # datos OMC: OMC_HOME (catálogos editables, estado)
+/opt/<nombre>               # proyectos: OMC_PROJECTS (ej. /opt/mi-proyecto)
+/root/.config/omc/          # GitHub (token opcional 0600, jamás en proyectos)
+```
+
+> Con otro usuario, `~` en vez de `/root`. Raíces custom:
+> `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh`.
 
 ```text
 src/omc/                      # paquete (cli, core, tui, github, gitutils, manifest,
@@ -573,15 +586,15 @@ src/omc/data/                 # addons-catalog.json, localizaciones.json, addons
 pyproject.toml                # pip install odoo-manager-compose -> comandos omc, omc-monitor
 requirements.txt              # runtime (flask + gunicorn) para `pip install -r` en venv
 deploy-vps.sh                 # instalación nativa en VPS (venv + systemd, idempotente)
-tests/                        # suite pytest (29 tests)
+tests/                        # suite pytest (85 tests)
 src/omc/monitor/              # monitor Flask solo-lectura (lo sirve `omc-monitor`)
 Manual-OMC.md                 # este manual
-<nombre>/                     # TUS proyectos viven aquí (~/odoo-manager-compose/<nombre> o $OMC_HOME)
 ```
 
 > Los JSON de `src/omc/data/` son los defaults empaquetados. Si creas
-> `~/odoo-manager-compose/addons-catalog.json` (o te lo genera `omc addons catalog-add`),
-> esa copia manda: es tu capa editable y no se pisa al actualizar el paquete.
+> `$OMC_HOME/addons-catalog.json` (default `/opt/omc`; o te lo genera
+> `omc addons catalog-add`), esa copia manda: es tu capa editable y no se
+> pisa al actualizar el paquete.
 
 ---
 
@@ -719,8 +732,8 @@ re-login (o `newgrp docker`) por el grupo docker.
 Paso 2 — omc (el deploy prepara /opt/omc + /opt con sudo único; uso diario sin sudo):
 
 ```bash
-git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose
-cd ~/odoo-manager-compose && ./deploy-vps.sh
+git clone https://github.com/berisoft-arg/odoo-manager-compose.git /opt/odoo-manager-compose
+cd /opt/odoo-manager-compose && ./deploy-vps.sh
 ```
 
 Raíces custom: `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh` (datos y proyectos).
@@ -734,8 +747,8 @@ omc --version && omc list
 Instalación nativa (venv aislado + monitor como servicio, sin Docker para `omc`):
 
 ```bash
-git clone <tu-repo> ~/odoo-manager-compose
-cd ~/odoo-manager-compose
+git clone <tu-repo> /opt/odoo-manager-compose
+cd /opt/odoo-manager-compose
 ./deploy-vps.sh   # defaults: datos /opt/omc, proyectos /opt/<nombre>
 # Raíces custom: OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh
 # (~/omc-data y ~/odoo-manager-compose existentes se respetan: migración)
