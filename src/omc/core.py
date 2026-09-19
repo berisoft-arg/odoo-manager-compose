@@ -3,7 +3,15 @@
 Resolución de datos (orden):
   1. $OMC_HOME/<nombre> ($ODOO_CREATOR_HOME como fallback legacy)
   2. ~/odoo-manager-compose/<nombre> (~/odoo-create/<nombre> como fallback legacy)
-  3. datos empaquetados (templates/, versions/ via importlib.resources)
+  3. /opt/omc/<nombre> (default en instalaciones nuevas)
+  4. datos empaquetados (templates/, versions/ via importlib.resources)
+
+Proyectos (orden en projects_home()):
+  1. $OMC_PROJECTS
+  2. $OMC_HOME ($ODOO_CREATOR_HOME legacy; compat: antes significaba proyectos)
+  3. ~/odoo-manager-compose (si existe: migración de instalaciones previas)
+  4. ~/odoo-create (si existe: migración legacy)
+  5. /opt (default en instalaciones nuevas: /opt/<proyecto>)
 """
 import json
 import os
@@ -13,11 +21,18 @@ from pathlib import Path
 
 _NUEVO_HOME = "odoo-manager-compose"
 _VIEJO_HOME = "odoo-create"
+_OPT_DATA = Path("/opt/omc")
+_OPT_PROJECTS = Path("/opt")
 
 
 def _home_env() -> str:
     """Dir base via entorno: $OMC_HOME, fallback $ODOO_CREATOR_HOME."""
     return os.environ.get("OMC_HOME", "") or os.environ.get("ODOO_CREATOR_HOME", "")
+
+
+def _projects_env() -> str:
+    """Raíz de proyectos via entorno: $OMC_PROJECTS."""
+    return os.environ.get("OMC_PROJECTS", "")
 
 
 def _default_home() -> Path:
@@ -38,6 +53,7 @@ def _home_candidates(nombre: str):
         cands.append(Path(env) / nombre)
     cands.append(Path.home() / _NUEVO_HOME / nombre)
     cands.append(Path.home() / _VIEJO_HOME / nombre)
+    cands.append(_OPT_DATA / nombre)
     return cands
 
 
@@ -52,20 +68,73 @@ def data_path(nombre: str) -> Path | None:
 ENTORNOS = ["desarrollo", "produccion"]
 
 
+def data_home() -> Path:
+    """Dir de datos de usuario (catálogos editables, estado del monitor).
+
+    $OMC_HOME, si no legados existentes (migración), si no /opt/omc.
+    """
+    env = _home_env()
+    if env:
+        return Path(env)
+    base = _default_home()
+    if base.is_dir():
+        return base
+    return _OPT_DATA
+
+
 def data_path_write(nombre: str) -> Path:
     """Ruta donde escribir un dato de usuario (crea el dir si hace falta)."""
-    env = _home_env()
-    base = Path(env) if env else _default_home()
+    base = data_home()
+    asegurar_escribible(base, "datos")
     base.mkdir(parents=True, exist_ok=True)
     return base / nombre
 
 
 def projects_home() -> Path:
-    """Dir donde viven los proyectos generados."""
+    """Raíz donde viven los proyectos generados (/opt/<proyecto> por default).
+
+    $OMC_PROJECTS, si no $OMC_HOME (compat: antes significaba proyectos),
+    si no legados existentes (migración), si no /opt.
+    """
+    proj = _projects_env()
+    if proj:
+        return Path(proj)
     env = _home_env()
     if env:
         return Path(env)
-    return _default_home()
+    base = _default_home()
+    if base.is_dir():
+        return base
+    return _OPT_PROJECTS
+
+
+def asegurar_escribible(ruta: Path, rol: str) -> None:
+    """Sale con instrucción de sudo único si no se puede escribir.
+
+    `rol`: "proyectos" o "datos", para el mensaje.
+    """
+    import sys as _sys
+    p = Path(ruta)
+    base = p if p.is_dir() else p.parent
+    try:
+        base.mkdir(parents=True, exist_ok=True)
+    except OSError:
+        pass
+    if base.is_dir() and os.access(base, os.W_OK):
+        return
+    _sys.exit(
+        f"{base} no es escribible ({rol}). Una vez en el host:\n"
+        f"  sudo mkdir -p {base} && sudo chown $(id -u):$(id -g) {base}\n"
+        f"Después no se necesita sudo. Alternativa sin sudo: "
+        f"OMC_PROJECTS=~/omc-proyectos OMC_HOME=~/omc-data omc"
+    )
+
+
+def default_salida(nombre: str, explicit=None) -> Path:
+    """Carpeta destino de un proyecto nuevo: --salida, si no <proyectos>/<nombre>."""
+    if explicit:
+        return Path(explicit).resolve()
+    return (projects_home() / nombre).resolve()
 
 
 def find_proyecto(explicit=None) -> Path:

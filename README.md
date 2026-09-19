@@ -45,13 +45,14 @@ sudo usermod -aG docker $USER
 
 Re-logueate (o `newgrp docker`) antes de seguir.
 
-Paso 2 — datos + omc (datos estándar en /opt/odoo):
+Paso 2 — omc (el deploy prepara /opt/omc + /opt con sudo único; uso diario sin sudo):
 
 ```bash
-sudo mkdir -p /opt/odoo && sudo chown $(id -u):$(id -g) /opt/odoo
 git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose
-cd ~/odoo-manager-compose && OMC_HOME=/opt/odoo ./deploy-vps.sh
+cd ~/odoo-manager-compose && ./deploy-vps.sh
 ```
+
+Raíces custom: `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh` (datos y proyectos).
 
 Paso 3 — verificar:
 
@@ -78,7 +79,7 @@ cd ~/odoo-manager-compose
 
 # 4) Instalar (venv aislado + monitor systemd) — idempotente, se puede re-ejecutar para actualizar
 ./deploy-vps.sh
-# Opcionales: OMC_HOME=~/omc-data MONITOR_PORT=8765 ./deploy-vps.sh
+# Opcionales: OMC_PROJECTS=... OMC_HOME=... MONITOR_PORT=8765 ./deploy-vps.sh
 #            ODOO_WEB_TOKEN=... ./deploy-vps.sh  # si no, se genera uno y se muestra una vez
 
 # 5) Verificar
@@ -129,7 +130,7 @@ omc crear --nombre mi-tienda --version 18 --entorno prod
 omc addons add --repo server-tools --org oca --odoo 18 auditlog
 omc addons bundle addons-bundle.json --odoo 18
 omc addons sync
-omc localizar --proyecto ~/omc-data/mi-tienda
+omc localizar --proyecto /opt/mi-tienda
 omc monitor --puerto 8765
 omc doctor --fix
 omc migrar

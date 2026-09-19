@@ -38,6 +38,8 @@ from .core import (
     data_path,
     data_path_write,
     projects_home,
+    default_salida,
+    asegurar_escribible,
     find_proyecto,
     odoo_to_branch,
     read_env_branch,
@@ -2587,7 +2589,10 @@ def crear_proyecto(args):
         mapping["ODOO_PORTS"] = ""
         mapping["NGINX_SERVICES"] = ""
         mapping["RCLONE_SERVICE"] = ""  # rclone/backup/restore son de prod
-    salida = Path(args.salida or f"./{nombre}").resolve()
+    salida = default_salida(nombre, args.salida)
+    if not args.salida and not args.no_input and es_interactivo():
+        salida = Path(preguntar("Carpeta del proyecto", str(salida)) or str(salida)).resolve()
+    asegurar_escribible(salida, "proyectos")
     print(f"\nGenerando en: {salida}")
     print(f"  Entorno : {entorno}")
     print(f"  Odoo    : {info['odoo']}")

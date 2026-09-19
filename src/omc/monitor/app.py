@@ -19,7 +19,7 @@ import sys
 import time
 from pathlib import Path
 
-# Raíz de proyectos a monitorear (NO el código): repo dev u $OMC_HOME en Docker.
+# Raíz de proyectos a monitorear (/opt por default, ver omc.core.projects_home).
 try:
     from omc.core import projects_home as _projects_home
 
@@ -27,8 +27,9 @@ try:
 except Exception:  # noqa: BLE001  (standalone: fallback sin paquete)
     import os as _os
 
-    _env = _os.environ.get("OMC_HOME", "") or _os.environ.get("ODOO_CREATOR_HOME", "")
-    BASE = (Path(_env) if _env else (Path.home() / "odoo-manager-compose")).resolve()
+    _env = (_os.environ.get("OMC_PROJECTS", "") or _os.environ.get("OMC_HOME", "")
+            or _os.environ.get("ODOO_CREATOR_HOME", ""))
+    BASE = (Path(_env) if _env else Path("/opt")).resolve()
 
 from flask import Flask, jsonify, render_template, request, abort  # noqa: E402
 

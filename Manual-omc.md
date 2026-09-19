@@ -491,8 +491,8 @@ filestore en `backups/full_backup_<bd>_dayN.tar.gz` (+ Drive si hay rclone).
 tu instancia local de pruebas al destino (VPS):
 
 ```bash
-scp ~/odoo-manager-compose/mi-proyecto/addons-bundle.json usuario@vps:~/omc-data/nuevo-proyecto/
-# datos, si duplicas todo: scp backups/full_backup_<bd>_dayN.tar.gz usuario@vps:~/omc-data/nuevo-proyecto/backups/
+scp ~/odoo-manager-compose/mi-proyecto/addons-bundle.json usuario@vps:/opt/nuevo-proyecto/
+# datos, si duplicas todo: scp backups/full_backup_<bd>_dayN.tar.gz usuario@vps:/opt/nuevo-proyecto/backups/
 ```
 
 En el destino, menú opción 2 → Plantilla bundle: la pregunta de ruta acepta el
@@ -621,7 +621,7 @@ omc                # abre el menú: todo se elige ahí (crear, sync, localizar, 
 Diagnóstico directo (atajos sin menú):
 
 ```bash
-omc list           # lista instancias detectadas en ~/odoo-manager-compose (o $OMC_HOME)
+omc list           # lista instancias en la raíz de proyectos ($OMC_PROJECTS, default /opt)
 omc doctor         # valida compose/conf/addons/.env por instancia
 omc doctor --fix   # repara addons_path si hace falta
 ```
@@ -690,13 +690,14 @@ sudo usermod -aG docker $USER
 
 Re-logueate (o `newgrp docker`) antes de seguir.
 
-Paso 2 — datos + omc (datos estándar en /opt/odoo):
+Paso 2 — omc (el deploy prepara /opt/omc + /opt con sudo único; uso diario sin sudo):
 
 ```bash
-sudo mkdir -p /opt/odoo && sudo chown $(id -u):$(id -g) /opt/odoo
 git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose
-cd ~/odoo-manager-compose && OMC_HOME=/opt/odoo ./deploy-vps.sh
+cd ~/odoo-manager-compose && ./deploy-vps.sh
 ```
+
+Raíces custom: `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh` (datos y proyectos).
 
 Paso 3 — verificar:
 
@@ -709,13 +710,23 @@ Instalación nativa (venv aislado + monitor como servicio, sin Docker para `omc`
 ```bash
 git clone <tu-repo> ~/odoo-manager-compose
 cd ~/odoo-manager-compose
-OMC_HOME=/opt/odoo ./deploy-vps.sh   # estándar; ~/omc-data también vale
+./deploy-vps.sh   # defaults: datos /opt/omc, proyectos /opt/<nombre>
+# Raíces custom: OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh
+# (~/omc-data y ~/odoo-manager-compose existentes se respetan: migración)
 ```
 
 El script es idempotente: verifica prerrequisitos (Python ≥3.10, `python3-venv`, git,
-docker + plugin compose, systemd de usuario), crea `~/.venv/omc`, instala
-`requirements.txt` + el paquete, deja symlinks en `~/.local/bin`, genera token si no le
-pasás `ODOO_WEB_TOKEN`, y habilita `omc-monitor` (`systemctl --user`).
+docker + plugin compose, systemd de usuario), deja escribibles `/opt/omc` (datos)
+y `/opt` (proyectos) con sudo **una sola vez** (uso diario sin sudo), crea
+`~/.venv/omc`, instala `requirements.txt` + el paquete, deja symlinks en
+`~/.local/bin`, genera token si no le pasás `ODOO_WEB_TOKEN`, y habilita
+`omc-monitor` (`systemctl --user`).
+
+Raíz de proyectos (`list`/`doctor`/`elegir`/monitor la escanean):
+`$OMC_PROJECTS` → `$OMC_HOME` (compat) → `~/odoo-manager-compose` existente →
+`~/odoo-create` existente → `/opt`. Datos: `$OMC_HOME` → legados → `/opt/omc`.
+`crear` genera en `<proyectos>/<nombre>` (pregunta `Carpeta del proyecto` en el
+menú; `--salida` manda; sin permiso sale con la instrucción de sudo único).
 
 Variables: `REPO_DIR`, `VENV_DIR`, `OMC_HOME`,
 `MONITOR_PORT` (8765), `MONITOR_HOST` (127.0.0.1), `ODOO_WEB_TOKEN`.

@@ -3,12 +3,13 @@
 # Uso:
 #   git clone <tu-repo> ~/odoo-manager-compose
 #   cd ~/odoo-manager-compose
-#   OMC_HOME=~/omc-data ./deploy-vps.sh
+#   OMC_HOME=/opt/omc OMC_PROJECTS=/opt ./deploy-vps.sh   (defaults; rara vez hace falta)
 #
 # Variables (todas opcionales, con defaults sensatos):
 #   REPO_DIR=...       código (default: dir de este script)
 #   VENV_DIR=...       entorno virtual (default: ~/.venv/omc; se crea si falta)
-#   OMC_HOME=...       proyectos + datos de usuario (default: ~/omc-data)
+#   OMC_HOME=...       datos de usuario (default: /opt/omc; se deja escribible una vez)
+#   OMC_PROJECTS=...   raíz de proyectos (default: /opt → /opt/<proyecto>)
 #   MONITOR_PORT=...   puerto del monitor (default: 8765)
 #   MONITOR_HOST=...   bind del monitor (default: 127.0.0.1; VPS público: reverse-proxy TLS)
 #   ODOO_WEB_TOKEN=... token del monitor (default: se genera y se muestra UNA vez)
@@ -18,7 +19,8 @@ set -euo pipefail
 
 REPO_DIR="${REPO_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 VENV_DIR="${VENV_DIR:-$HOME/.venv/omc}"
-OMC_HOME="${OMC_HOME:-$HOME/omc-data}"
+OMC_HOME="${OMC_HOME:-/opt/omc}"
+OMC_PROJECTS="${OMC_PROJECTS:-/opt}"
 MONITOR_PORT="${MONITOR_PORT:-8765}"
 MONITOR_HOST="${MONITOR_HOST:-127.0.0.1}"
 UNIT_DIR="$HOME/.config/systemd/user"
@@ -83,9 +85,24 @@ case ":$PATH:" in
   *) echo "AVISO: $BIN_DIR no está en tu PATH. Agregá a ~/.bashrc: export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
 esac
 
-# --- 4) Datos -------------------------------------------------------------------
-mkdir -p "$OMC_HOME"
-log "OMC_HOME=$OMC_HOME"
+# --- 4) Datos + raíz de proyectos -------------------------------------------------
+# Sudo único: se dejan escribibles una vez; el uso diario no necesita sudo.
+asegurar_dir() {
+  local d="$1" rol="$2"
+  if [ -d "$d" ] && [ -w "$d" ]; then
+    log "$rol: $d (ya escribible)"
+    return 0
+  fi
+  if command -v sudo >/dev/null 2>&1; then
+    sudo mkdir -p "$d" && sudo chown "$(id -u):$(id -g)" "$d" \
+      || fail "sudo no pudo preparar $d"
+  else
+    fail "$d no es escribible y no hay sudo: sudo mkdir -p $d && sudo chown $(id -u):$(id -g) $d"
+  fi
+}
+asegurar_dir "$OMC_HOME" "OMC_HOME (datos)"
+asegurar_dir "$OMC_PROJECTS" "OMC_PROJECTS (proyectos)"
+log "OMC_HOME=$OMC_HOME OMC_PROJECTS=$OMC_PROJECTS"
 
 # --- 5) Token del monitor ---------------------------------------------------------
 if [ -z "${ODOO_WEB_TOKEN:-}" ]; then
@@ -107,6 +124,7 @@ After=network.target
 [Service]
 Type=simple
 Environment=OMC_HOME=$OMC_HOME
+Environment=OMC_PROJECTS=$OMC_PROJECTS
 Environment=ODOO_WEB_TOKEN=$ODOO_WEB_TOKEN
 ExecStart=$VENV_DIR/bin/omc-monitor --host $MONITOR_HOST --port $MONITOR_PORT
 Restart=on-failure
@@ -129,7 +147,8 @@ fi
 echo ""
 echo "Odoo Manager Compose listo."
 echo "  omc:        $($VENV_DIR/bin/omc --version) ($BIN_DIR/omc -> venv)"
-echo "  OMC_HOME:   $OMC_HOME"
+echo "  OMC_HOME:   $OMC_HOME (datos)"
+echo "  Proyectos:  $OMC_PROJECTS/<nombre> (ej. $OMC_PROJECTS/mi-odoo)"
 echo "  Monitor:    http://$MONITOR_HOST:$MONITOR_PORT"
 if [ "$GENERADO" = "1" ]; then
   echo "  Token:      $ODOO_WEB_TOKEN  (generado ahora; guardalo, no se muestra más)"
@@ -142,5 +161,5 @@ echo "  Logs:                         systemctl --user status omc-monitor"
 echo "  Actualizar:                   cd $REPO_DIR && git pull && ./deploy-vps.sh"
 echo "  Repos privados GitHub:        export GITHUB_TOKEN=...  (memoria, no se guarda)"
 echo ""
-echo "  Agregá a tu ~/.bashrc si OMC_HOME no persiste entre sesiones:"
-echo "    export OMC_HOME=$OMC_HOME"
+echo "  Agregá a tu ~/.bashrc si OMC_HOME/OMC_PROJECTS no persisten entre sesiones:"
+echo "    export OMC_HOME=$OMC_HOME OMC_PROJECTS=$OMC_PROJECTS"
