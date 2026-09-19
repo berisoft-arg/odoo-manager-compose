@@ -730,6 +730,11 @@ Raíz de proyectos (`list`/`doctor`/`elegir`/monitor la escanean):
 `crear` genera en `<proyectos>/<nombre>` (pregunta `Carpeta del proyecto` en el
 menú; `--salida` manda; sin permiso sale con la instrucción de sudo único).
 
+Re-deploy (`git pull && ./deploy-vps.sh`): es seguro re-ejecutar. Reutiliza el
+token del monitor existente (rota solo si exportás `ODOO_WEB_TOKEN` nuevo),
+limpia sola la función `omc()` del experimento Docker si quedó en `~/.bashrc`,
+y agrega `~/.local/bin` a tu `PATH` si falta (abrí shell nuevo después).
+
 Variables: `REPO_DIR`, `VENV_DIR`, `OMC_HOME`,
 `MONITOR_PORT` (8765), `MONITOR_HOST` (127.0.0.1), `ODOO_WEB_TOKEN`.
 

@@ -74,7 +74,7 @@ sudo apt install -y python3 python3-venv python3-pip git curl
 #    Manual alternativo (repo oficial): https://docs.docker.com/engine/install/ubuntu/
 #    Luego: re-login o `newgrp docker` por el grupo docker.
 
-# 3) Bajar OMC (no clonar dentro de odoo-manager-compose)
+# 3) Bajar OMC (en home, nunca dentro de /opt donde viven los proyectos)
 git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose
 cd ~/odoo-manager-compose
 
@@ -127,12 +127,12 @@ omc       # abre el menú interactivo
 ```bash
 omc                 # menú: crear, localizar, addons, nginx, rclone, monitor,
                     #        github, backup, restore, migrar
-omc crear --nombre mi-tienda --version 18 --entorno prod
+omc crear --nombre mi-tienda --version 18 --entorno produccion
 omc addons add --repo server-tools --org oca --odoo 18 auditlog
 omc addons bundle addons-bundle.json --odoo 18
 omc addons sync
 omc localizar --proyecto /opt/mi-tienda
-omc monitor --puerto 8765
+omc monitor
 omc doctor --fix
 omc migrar
 ```

@@ -29,6 +29,15 @@ BIN_DIR="$HOME/.local/bin"
 log()  { printf '== %s\n' "$*"; }
 fail() { printf 'XX %s\n' "$*" >&2; exit 1; }
 
+# --- 0) Auto-limpieza experimento Docker -------------------------------------------
+# Si quedó la función omc() del experimento omc-docker en ~/.bashrc, tapa al
+# binario nativo: se borra solo ese bloque marcado (el resto no se toca).
+BRC="$HOME/.bashrc"
+if [ -f "$BRC" ] && grep -q "omc-docker" "$BRC" 2>/dev/null; then
+  sed -i '/# >>> omc-docker >>>/,/# <<< omc-docker <<</d' "$BRC"
+  log "Limpieza: bloque legacy omc-docker borrado de $BRC (abrí shell nuevo)"
+fi
+
 # --- 1) Prerrequisitos -------------------------------------------------------
 log "Chequeando prerrequisitos..."
 command -v python3 >/dev/null || fail "falta python3 (apt install python3)"
@@ -97,9 +106,18 @@ mkdir -p "$BIN_DIR"
 ln -sf "$VENV_DIR/bin/omc" "$BIN_DIR/omc"
 ln -sf "$VENV_DIR/bin/omc-monitor" "$BIN_DIR/omc-monitor"
 log "Symlinks: $BIN_DIR/omc -> $VENV_DIR/bin/omc"
+PATH_MARK="# omc en PATH (deploy-vps.sh)"
 case ":$PATH:" in
-  *":$BIN_DIR:"*) ;;
-  *) echo "AVISO: $BIN_DIR no está en tu PATH. Agregá a ~/.bashrc: export PATH=\"\$HOME/.local/bin:\$PATH\"" ;;
+  *":$BIN_DIR:"*)
+    log "$BIN_DIR ya está en tu PATH."
+    ;;
+  *)
+    if ! grep -qF "$PATH_MARK" "$BRC" 2>/dev/null; then
+      [ -f "$BRC" ] || touch "$BRC"
+      printf '\n%s\nexport PATH="$HOME/.local/bin:$PATH"\n' "$PATH_MARK" >> "$BRC"
+    fi
+    log "Agregado $BIN_DIR a tu PATH en $BRC (abrí shell nuevo o corre: export PATH=\"\$HOME/.local/bin:\$PATH\")"
+    ;;
 esac
 
 # --- 4) Datos + raíz de proyectos -------------------------------------------------
@@ -122,11 +140,22 @@ asegurar_dir "$OMC_PROJECTS" "OMC_PROJECTS (proyectos)"
 log "OMC_HOME=$OMC_HOME OMC_PROJECTS=$OMC_PROJECTS"
 
 # --- 5) Token del monitor ---------------------------------------------------------
-if [ -z "${ODOO_WEB_TOKEN:-}" ]; then
-  ODOO_WEB_TOKEN="$("$VENV_DIR/bin/python" -c 'import secrets; print(secrets.token_urlsafe(32))')"
-  GENERADO=1
-else
+# Orden: exportado > reutilizado del servicio existente > generado (solo re-deploy
+# no rota el token: si querés uno nuevo, exportá ODOO_WEB_TOKEN antes de correr).
+if [ -n "${ODOO_WEB_TOKEN:-}" ]; then
   GENERADO=0
+  ORIGEN_TOKEN="provisto por vos"
+else
+  PREVIO="$(grep -E '^Environment=ODOO_WEB_TOKEN=' "$UNIT_DIR/omc-monitor.service" 2>/dev/null | cut -d= -f3- || true)"
+  if [ -n "$PREVIO" ]; then
+    ODOO_WEB_TOKEN="$PREVIO"
+    GENERADO=0
+    ORIGEN_TOKEN="reutilizado del servicio existente"
+  else
+    ODOO_WEB_TOKEN="$("$VENV_DIR/bin/python" -c 'import secrets; print(secrets.token_urlsafe(32))')"
+    GENERADO=1
+    ORIGEN_TOKEN="generado ahora; guardalo, no se muestra más"
+  fi
 fi
 
 # --- 6) Servicio systemd de usuario -------------------------------------------------
@@ -160,6 +189,16 @@ else
   fail "el servicio no arrancó: systemctl --user status omc-monitor / journalctl --user -u omc-monitor"
 fi
 
+# --- 6b) Linger (monitor sin login) --------------------------------------------------
+# Se intenta activar (como root o con sudo no-interactivo sale solo); si no,
+# queda la instrucción manual en el resumen.
+if loginctl enable-linger "$USER" 2>/dev/null || sudo -n loginctl enable-linger "$USER" 2>/dev/null; then
+  log "Linger activado (el monitor sobrevive sin login)."
+  LINGER_OK=1
+else
+  LINGER_OK=0
+fi
+
 # --- 7) Resumen ----------------------------------------------------------------------
 echo ""
 echo "Odoo Manager Compose listo."
@@ -168,12 +207,17 @@ echo "  OMC_HOME:   $OMC_HOME (datos)"
 echo "  Proyectos:  $OMC_PROJECTS/<nombre> (ej. $OMC_PROJECTS/mi-odoo)"
 echo "  Monitor:    http://$MONITOR_HOST:$MONITOR_PORT"
 if [ "$GENERADO" = "1" ]; then
-  echo "  Token:      $ODOO_WEB_TOKEN  (generado ahora; guardalo, no se muestra más)"
+  echo "  Token:      $ODOO_WEB_TOKEN  ($ORIGEN_TOKEN)"
 else
-  echo "  Token:      (el de ODOO_WEB_TOKEN, provisto por vos)"
+  echo "  Token:      ($ORIGEN_TOKEN)"
 fi
+echo "  Token en:   $UNIT (grep ODOO_WEB_TOKEN; permiso 600)"
 echo ""
-echo "  Para que arranque sin login:  sudo loginctl enable-linger $USER"
+if [ "${LINGER_OK:-0}" = "1" ]; then
+  echo "  Linger:       activado (el monitor sobrevive sin login)"
+else
+  echo "  Para que arranque sin login:  sudo loginctl enable-linger $USER"
+fi
 echo "  Logs:                         systemctl --user status omc-monitor"
 echo "  Actualizar:                   cd $REPO_DIR && git pull && ./deploy-vps.sh"
 echo "  Repos privados GitHub:        export GITHUB_TOKEN=...  (memoria, no se guarda)"
