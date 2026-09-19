@@ -679,12 +679,26 @@ correría con los binarios origen y no migraría nada) y `scripts/migrate_db.sh`
 
 ## 17. VPS con deploy-vps.sh
 
+**Instalación express en un VPS nuevo (dos pegadas):**
+
+```bash
+# 1) base + docker + grupo (después: re-logueate o `newgrp docker`)
+sudo apt update && sudo apt install -y python3 python3-venv git curl docker.io docker-compose-plugin
+sudo usermod -aG docker $USER
+# 2) datos + omc (todo de una; datos estándar en /opt/odoo)
+sudo mkdir -p /opt/odoo && sudo chown $(id -u):$(id -g) /opt/odoo \
+&& git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose \
+&& cd ~/odoo-manager-compose && OMC_HOME=/opt/odoo ./deploy-vps.sh
+# 3) verificar
+omc --version && omc list   # `omc` pelado abre el menú 1-10
+```
+
 Instalación nativa (venv aislado + monitor como servicio, sin Docker para `omc`):
 
 ```bash
 git clone <tu-repo> ~/odoo-manager-compose
 cd ~/odoo-manager-compose
-OMC_HOME=~/omc-data ./deploy-vps.sh
+OMC_HOME=/opt/odoo ./deploy-vps.sh   # estándar; ~/omc-data también vale
 ```
 
 El script es idempotente: verifica prerrequisitos (Python ≥3.10, `python3-venv`, git,
