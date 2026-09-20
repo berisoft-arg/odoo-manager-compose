@@ -63,6 +63,31 @@ def test_nginx_t_multisitio(tmp_path):
 
 
 @need_docker
+def test_nginx_t_dos_sites_proxy(tmp_path):
+    # Dos sites proxy juntos: el resolver va por server (uno global duplicado
+    # voltea el nginx entero con "directive is duplicate").
+    from omc.core import render, template_text
+    confd = tmp_path / "conf.d"
+    confd.mkdir()
+    for letra in ("a", "b"):
+        (confd / f"{letra}.test.conf").write_text(
+            render(template_text("proxy-site.conf.tpl"),
+                   {"PROYECTO": f"s{letra}", "DOMINIO": f"{letra}.test",
+                    "ODOO_HOST": f"be-{letra}"}),
+            encoding="utf-8")
+    (confd / "gzip.conf").write_text(
+        render(template_text("nginx-gzip.conf.tpl"), {"PROYECTO": "proxy"}),
+        encoding="utf-8")
+    r = _run(["docker", "run", "--rm",
+              "--add-host", "be-a:127.0.0.1",
+              "--add-host", "be-b:127.0.0.1",
+              "-v", f"{confd}:/etc/nginx/conf.d/:ro",
+              "nginx:alpine", "nginx", "-t"])
+    assert r.returncode == 0, r.stderr
+    assert "test is successful" in r.stderr
+
+
+@need_docker
 def test_nginx_t_https_con_cert_autofirmado(tmp_path):
     if not shutil.which("openssl"):
         pytest.skip("sin openssl")
@@ -289,8 +314,9 @@ def test_e2e_web_proxy_dia1(monkeypatch, tmp_path):
         assert _get("a.test") == "TIENDA-OK"
         conf = (proxy / "conf.d" / "a.test.conf").read_text(encoding="utf-8")
         assert "listen 443 ssl" not in conf  # día 1: certonly falló
-        assert "upstream tienda-odoo" in conf
-        assert "server tienda-odoo:8069;" in conf
+        assert "resolver 127.0.0.11 valid=10s;" in conf
+        assert "set $up tienda-odoo:8069;" in conf
+        assert "upstream {" not in conf
         assert "DOMINIO=a.test" in (sitio / ".env").read_text(encoding="utf-8")
         assert "proxy_mode = True" in (sitio / "config" / "odoo.conf").read_text(
             encoding="utf-8")
@@ -298,5 +324,113 @@ def test_e2e_web_proxy_dia1(monkeypatch, tmp_path):
         _run(["docker", "compose", "-f", str(sitio / "docker-compose.yml"),
               "down"], env=dict(os.environ))
         _run(["docker", "compose", "-f", str(proxy / "docker-compose.yml"),
+              "down"], env=dict(os.environ))
+        _run(["docker", "network", "rm", "omc-proxy"])
+
+
+@need_docker
+def test_e2e_backend_caido_no_tumba_al_resto(monkeypatch, tmp_path):
+    """Aislamiento: con resolver+variable, parar un backend no voltea al proxy.
+
+    Recarga OK con un upstream irresoluble; el site sano 200, el caído 5xx.
+    """
+    import os
+    from omc.core import puerto_en_uso, render, template_text
+    if puerto_en_uso(80) or puerto_en_uso(443):
+        pytest.skip("80/443 ocupados en este host")
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    real_run = subprocess.run
+
+    def _router(cmd, **k):
+        if "certbot" in cmd:
+            class _RC:
+                returncode = 1
+            return _RC()
+        return real_run(cmd, **k)
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _router)
+    confd = tmp_path / "proxy" / "conf.d"
+
+    def _be(letra, texto):
+        be = tmp_path / f"be-{letra}"
+        (be / "conf.d").mkdir(parents=True)
+        (be / "conf.d" / "be.conf").write_text(
+            "server {\n    listen 8069;\n    location / {\n"
+            "        return 200 '" + texto + "';\n    }\n}\n",
+            encoding="utf-8")
+        r = real_run(["docker", "run", "-d", "--name", f"omctest-be-{letra}",
+                      "--network", "omc-proxy",
+                      "-v", f"{be / 'conf.d'}:/etc/nginx/conf.d/:ro",
+                      "nginx:alpine"],
+                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                     text=True, timeout=60)
+        assert r.returncode == 0, r.stderr
+        time.sleep(2)
+        st = real_run(["docker", "inspect", "-f", "{{.State.Status}}",
+                       f"omctest-be-{letra}"],
+                      stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                      text=True, timeout=60)
+        assert st.stdout.strip() == "running", st.stderr
+
+    def _code(host):
+        import urllib.error
+        req = urllib.request.Request("http://127.0.0.1:80/",
+                                     headers={"Host": host})
+        try:
+            with urllib.request.urlopen(req, timeout=5) as r:
+                return r.status, r.read().decode()
+        except urllib.error.HTTPError as e:
+            return e.code, ""
+
+    try:
+        from omc.flows import run_proxy_init
+        run_proxy_init()
+        for letra, texto in (("a", "A-OK"), ("b", "B-OK")):
+            _be(letra, texto)
+            (confd / f"{letra}.test.conf").write_text(
+                render(template_text("proxy-site.conf.tpl"),
+                       {"PROYECTO": f"s{letra}", "DOMINIO": f"{letra}.test",
+                        "ODOO_HOST": f"omctest-be-{letra}"}),
+                encoding="utf-8")
+        r = real_run(["docker", "compose", "exec", "nginx", "nginx", "-s",
+                      "reload"],
+                     cwd=str(tmp_path / "proxy"),
+                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                     text=True, timeout=60)
+        assert r.returncode == 0, r.stderr
+        time.sleep(3)
+
+        def _code_ok(host, texto, tries=15):
+            ultimo = (None, "")
+            for _ in range(tries):
+                ultimo = _code(host)
+                if ultimo == (200, texto):
+                    return ultimo
+                time.sleep(1)
+            return ultimo
+
+        assert _code_ok("a.test", "A-OK") == (200, "A-OK")
+        # parar un backend: el reload SIGUE ok y el otro site ni se entera
+        real_run(["docker", "stop", "omctest-be-a"],
+                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                 timeout=60)
+        r = real_run(["docker", "compose", "exec", "nginx", "nginx", "-s",
+                      "reload"],
+                     cwd=str(tmp_path / "proxy"),
+                     stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                     text=True, timeout=60)
+        assert r.returncode == 0, r.stderr  # con upstream estático fallaría acá
+        time.sleep(3)
+        assert _code_ok("b.test", "B-OK") == (200, "B-OK")
+        for _ in range(5):
+            code_a, _ = _code("a.test")
+            assert code_a >= 500  # solo su site cae
+            time.sleep(1)
+    finally:
+        for n in ("omctest-be-a", "omctest-be-b"):
+            _run(["docker", "rm", "-f", n])
+        _run(["docker", "compose", "-f",
+              str(tmp_path / "proxy" / "docker-compose.yml"),
               "down"], env=dict(os.environ))
         _run(["docker", "network", "rm", "omc-proxy"])

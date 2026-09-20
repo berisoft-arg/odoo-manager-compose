@@ -306,11 +306,13 @@ def test_web_proxy_completo(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr("omc.flows.subprocess.run", _fake)
     modo_configurar_web(_ns_web(p, proxy=True))
     out = capsys.readouterr().out
-    # site en el proxy con upstream propio
+    # site en el proxy con resolver (sin upstream estático)
     sitio = proxy / "conf.d" / "tienda.com.conf"
     txt = sitio.read_text(encoding="utf-8")
     assert "server_name tienda.com www.tienda.com;" in txt
-    assert "proxy_pass http://tienda-odoo:8069/;" in txt
+    assert "proxy_pass http://$up;" in txt
+    assert "set $up tienda-odoo:8069;" in txt
+    assert "upstream {" not in txt
     assert "{{" not in txt
     # compose del sitio parcheado
     comp = (p / "docker-compose.yml").read_text(encoding="utf-8")
@@ -335,7 +337,7 @@ def test_web_proxy_completo(monkeypatch, tmp_path, capsys):
     idx_r = next(i for i, (c, _) in enumerate(llamadas)
                  if c[-3:] == ["nginx", "-s", "reload"])
     assert idx_t < idx_r
-    assert "cron en host" in out and "https://tienda.com" in out
+    assert "cron semanal en host" in out and "https://tienda.com" in out
 
 
 def test_web_proxy_sin_init_falla_limpio(monkeypatch, tmp_path, capsys):
@@ -422,7 +424,7 @@ def test_web_proxy_cert_falla_conserva_dia1(monkeypatch, tmp_path, capsys):
     sitio = proxy / "conf.d" / "tienda.com.conf"
     assert "listen 443 ssl" not in sitio.read_text(encoding="utf-8")
     assert "https://tienda.com" not in out
-    assert "cron en host" not in out
+    assert "cron semanal en host" not in out
 
 
 def test_web_proxy_reusa_cert_existente(monkeypatch, tmp_path, capsys):
@@ -711,6 +713,25 @@ def test_nginx_https_modo_proxy():
     assert "http://odoo:" not in out and "server odoo:" not in out
 
 
+def test_proxy_site_templates_con_resolver():
+    from omc.core import render, template_text, sin_renderizar
+    m = {"PROYECTO": "demo", "DOMINIO": "tienda.com", "ODOO_HOST": "demo-odoo"}
+    dia1 = render(template_text("proxy-site.conf.tpl"), m)
+    https = render(template_text("proxy-site-https.conf.tpl"), m)
+    for out in (dia1, https):
+        assert sin_renderizar(out) == []
+        assert "resolver 127.0.0.11 valid=10s;" in out
+        assert "upstream {" not in out  # nada estático: un caído no voltea al resto
+        assert "server_name tienda.com www.tienda.com;" in out
+    assert "set $up demo-odoo:8069;" in dia1
+    assert "proxy_pass http://$up;" in dia1
+    assert "set $up demo-odoo:8069;" in https
+    assert "set $up_ws demo-odoo:8072;" in https
+    assert "proxy_pass http://$up_ws;" in https
+    assert https.count("listen 443 ssl;") == 2
+    assert "return 404;" in https  # manager bloqueado también en proxy
+
+
 def test_nginx_dia1_modos():
     from omc.core import render, template_text, sin_renderizar
     clasico = render(template_text("nginx.conf.tpl"),
@@ -893,8 +914,25 @@ def test_generar_odoo_conf_usa_limites_del_reparto():
     assert "limit_memory_hard = 222" in conf
     conf_dflt = generar_odoo_conf("produccion", {})
     assert "limit_memory_soft = 2147483648" in conf_dflt  # fallback defaults Odoo
+    assert "list_db = False" in conf_dflt  # gestor de BD oculto en prod
     conf_dev = generar_odoo_conf("desarrollo", {})
     assert "limit_memory" not in conf_dev and "workers = 0" in conf_dev
+    assert "list_db = False" in conf_dev  # también en dev
+
+
+def test_env_ejemplo_sin_residuos_ni_secretos():
+    from omc.core import render, template_text, sin_renderizar
+    mapping = {"PROYECTO": "demo", "ENTORNO": "desarrollo", "ODOO_VERSION": "18",
+               "ODOO_IMAGE": "odoo:18", "POSTGRES_IMAGE": "postgres:16",
+               "POSTGRES_PASSWORD": "cambiar-esta-clave",
+               "ODOO_PORT": "8069", "ODOO_GEVENT_PORT": "8072",
+               "PG_SHARED_BUFFERS": "128MB", "PG_EFFECTIVE_CACHE": "512MB",
+               "PG_WORK_MEM": "8MB", "PG_MAINT_MEM": "64MB", "PG_MAX_CONN": "50",
+               "ODOO_CPUS": "1.0", "ODOO_MEM": "2G", "DB_CPUS": "0.5", "DB_MEM": "1G"}
+    out = render(template_text("env.ejemplo.tpl"), mapping)
+    assert sin_renderizar(out) == []
+    assert "POSTGRES_PASSWORD=cambiar-esta-clave" in out
+    assert "ghp_" not in out and "token" not in out.lower()
 
 
 

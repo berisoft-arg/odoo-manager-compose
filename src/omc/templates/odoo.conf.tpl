@@ -9,6 +9,7 @@ db_port = 5432
 db_user = odoo
 db_password = {{PG_PASSWORD}}
 db_maxconn = 64
+list_db = False
 workers = {{WORKERS}}
 {{EXTRA_OPCIONES}}
 ; Sin logfile = log a stdout (ideal para `docker compose logs`)

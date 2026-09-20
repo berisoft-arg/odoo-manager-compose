@@ -402,7 +402,7 @@ def aplicar_localizacion(salida: Path, version: str, perfil_key: str,
     print("  ✓ addons/localizacion.json guardado (apt/SECLEVEL/cache van al Dockerfile).")
     script_params = _escribir_parametros_ar(salida)
     print(f"  ✓ {script_params.name} generado (crea parámetros AR si no existen).")
-    print("  → AFIP arranca en homologación (afip.ws.env.type): pasalo a producción")
+    print("  → AFIP arranca en homologación (afip.ws.env.type): pasalo a `production`")
     print("    cuando factures de verdad (parametros_ar.sh / parámetros de la compañía).")
     if ofrecer_aplicar and es_interactivo():
         from types import SimpleNamespace
@@ -810,7 +810,7 @@ def _activar_https_proxy(salida: Path, proxy_root: Path, dominio: str,
             print("  Queda el HTTP del día 1; reintenta cuando el DNS resuelva.")
             return False
     sitio = proxy_root / "conf.d" / f"{dominio}.conf"
-    sitio.write_text(render(cargar_template("nginx-https.conf.tpl"), {
+    sitio.write_text(render(cargar_template("proxy-site-https.conf.tpl"), {
         "PROYECTO": salida.name,
         "DOMINIO": dominio,
         "ODOO_HOST": odoo_host,
@@ -827,7 +827,7 @@ def _activar_https_proxy(salida: Path, proxy_root: Path, dominio: str,
         print(f"  cd {proxy_root} && docker compose restart nginx")
         return False
     print(f"  ✓ HTTPS activo: https://{dominio} (www redirige al apex).")
-    print(f"  Renovar todo (cron en host): cd {proxy_root} && "
+    print(f"  Renovar todo (cron semanal en host: 0 3 * * 0): cd {proxy_root} && "
           "docker compose run --rm certbot renew && "
           "docker compose exec nginx nginx -s reload")
     return True
@@ -869,7 +869,7 @@ def modo_configurar_web_proxy(args, salida, dominio: str, email: str, staging: b
             render(cargar_template("nginx-gzip.conf.tpl"), {"PROYECTO": PROXY_PROJECT}),
             encoding="utf-8")
     sitio = confd / f"{dominio}.conf"
-    sitio.write_text(render(cargar_template("nginx.conf.tpl"), {
+    sitio.write_text(render(cargar_template("proxy-site.conf.tpl"), {
         "PROYECTO": salida.name, "DOMINIO": dominio, "ODOO_HOST": odoo_host,
     }), encoding="utf-8")
     print(f"  ✓ site día 1 en proxy: conf.d/{dominio}.conf.")
@@ -2919,6 +2919,10 @@ def crear_proyecto(args):
         # dev: sin stack web/backup (son de prod)
         pass
     (salida / ".env").write_text("\n".join(env_lines) + "\n", encoding="utf-8")
+    (salida / ".env.ejemplo").write_text(
+        render(cargar_template("env.ejemplo.tpl"),
+               dict(mapping, POSTGRES_PASSWORD="cambiar-esta-clave")),
+        encoding="utf-8")
     (salida / "README.md").write_text(readme, encoding="utf-8")
     (salida / ".gitignore").write_text(gitignore, encoding="utf-8")
     print("\nArchivos creados:")

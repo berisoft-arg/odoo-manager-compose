@@ -6,7 +6,9 @@
   (`omc proxy init`: compose + red externa `omc-proxy` + nginx único en 80/443),
   `omc web --proxy/--standalone`, sites por subdominio en `conf.d/` con TLS
   centralizado (certonly apex + www, reuso sin re-emitir, renew por cron),
-  templates nginx parametrizados con `{{ODOO_HOST}}`. Opción 11 del menú.
+  templates nginx parametrizados con `{{ODOO_HOST}}`; sites proxy sin
+  `upstream`: `resolver 127.0.0.11` + `proxy_pass` con variable (un backend
+  caído no voltea al resto). Opción 11 del menú.
 
 ## [1.0.0]
 

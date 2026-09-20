@@ -94,7 +94,7 @@ docker compose run --rm certbot certonly --webroot -w /var/www/certbot \
 # 3) Reemplazar nginx/nginx.conf por la estructura HTTPS y recargar
 #    (el asistente lo hace solo con "¿Obtener certificado y activar HTTPS ahora?")
 docker compose exec nginx nginx -s reload
-# Renovar (cron mensual en el host):
+# Renovar (cron semanal en el host: 0 3 * * 0):
 docker compose run --rm certbot renew && docker compose exec nginx nginx -s reload
 ```
 

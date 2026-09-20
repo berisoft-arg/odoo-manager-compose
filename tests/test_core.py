@@ -25,14 +25,15 @@ def test_parse_addon_spec():
 def test_reparto_vps():
     r = reparto_vps(4, 8, con_nginx=True)
     assert "GB" in r["ODOO_MEM"]
-    assert r["ODOO_WORKERS"] == "9"
+    assert r["ODOO_WORKERS"] == "4"  # min(2CPU+1, tope RAM 1GB/worker)
     assert float(r["ODOO_CPUS"]) > 1.5
     assert r["PG_SHARED_BUFFERS"] == "1352MB"  # 20% de 8GB topado al 60% del db
     assert r["PG_EFFECTIVE_CACHE"] == "4GB"    # 50% de 8GB
     r2 = reparto_vps(2, 4, con_nginx=False)
-    assert r2["ODOO_WORKERS"] == "5"
+    assert r2["ODOO_WORKERS"] == "2"
     r3 = reparto_vps(2, 2, con_nginx=True)     # VPS chico: manda el tope db
     assert r3["PG_SHARED_BUFFERS"] == "307MB"
+    assert r3["ODOO_WORKERS"] == "1"  # 0.8GB -> un solo slot de 1GB
 
 
 def test_render_sin_residuos():
@@ -79,12 +80,12 @@ def test_templates_render_sin_residuos():
 
 def test_reparto_limites_memoria():
     r = reparto_vps(4, 8, con_nginx=True)
-    # odoo 4.5GB / (9 workers + cron + longpolling) -> soft 418MB, hard 1.25x (foro Odoo)
-    assert r["ODOO_LIMIT_SOFT"] == "439258018"
-    assert r["ODOO_LIMIT_HARD"] == "549072522"
+    # odoo 4.5GB / (4 workers + cron + longpolling) -> soft 768MB, hard 960MB
+    assert r["ODOO_LIMIT_SOFT"] == "805306368"
+    assert r["ODOO_LIMIT_HARD"] == "1006632960"
     r2 = reparto_vps(2, 2, con_nginx=True)
-    assert r2["ODOO_LIMIT_SOFT"] == str(256 * 1024**2)  # piso VPS chicos
-    assert r2["ODOO_LIMIT_HARD"] == str(int(256 * 1024**2 * 1.25))
+    assert r2["ODOO_LIMIT_SOFT"] == "286331153"  # 0.8GB/3, arriba del piso
+    assert r2["ODOO_LIMIT_HARD"] == str(768 * 1024**2)  # piso hard p/requests pesados
 
 
 def _limpiar_env(monkeypatch, home):

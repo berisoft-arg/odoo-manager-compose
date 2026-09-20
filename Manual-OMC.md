@@ -46,7 +46,8 @@ con `git sparse-checkout` (clones de pocos MB con `git pull` futuro).
 mi-proyecto/
   docker-compose.yml        # db (postgres) + odoo (+ nginx/certbot en prod con dominio)
   .env                      # versiones, passwords, puertos, tuning PG, límites, dominio
-  config/odoo.conf          # addons_path múltiple, workers, proxy_mode si hay nginx
+  .env.ejemplo              # plantilla sin secretos (copiar a .env y completar)
+  config/odoo.conf          # addons_path múltiple, workers, proxy_mode si hay nginx, list_db = False
   nginx/nginx.conf          # solo prod con dominio
   letsencrypt/ certbot-www/ # solo prod con dominio
   scripts/
@@ -84,7 +85,7 @@ addons_path = /mnt/extra-addons/custom,/mnt/extra-addons,/mnt/extra-addons/adhoc
 | Aspecto | desarrollo | producción |
 |---|---|---|
 | `restart` | `no` (no vuelve solo) | `always` |
-| odoo | `--dev=all`, workers 0, 8072 expuesto | workers `2CPU+1` (tope 16) + límites, `proxy_mode` si hay nginx |
+| odoo | `--dev=all`, workers 0, 8072 expuesto | workers `min(2CPU+1, RAM/1GB)` (tope 16) + límites, `proxy_mode` si hay nginx |
 | postgres | liviano (128MB shared_buffers, 50 conn) | tuneado (256MB, 100 conn, `command:`) |
 | recursos | 1 CPU / 2G odoo | 2 CPU / 4G odoo (+ límites en db y nginx) |
 | web | directa en `ODOO_PORT` | nginx + certbot opcional por dominio |
@@ -101,7 +102,7 @@ addons_path = /mnt/extra-addons/custom,/mnt/extra-addons,/mnt/extra-addons/adhoc
 
 ---
 
-## 3. Inicio rápido
+## 3. Inicio rápido (en tu máquina)
 
 ```bash
 cd ~/odoo-manager-compose
@@ -275,7 +276,7 @@ y ofrece correr `sync` (deps + Dockerfile con
 m2crypto/SECLEVEL/cache + rebuild). Además genera `scripts/parametros_ar.sh`
 (idempotente: crea `ir.config_parameter` si no existen, hoy `report.url`
 → `http://localhost:8069` y `afip.ws.env.type` → `homologation`) y ofrece fijarlos si ya hay BD creada.
-Acordate de pasar `afip.ws.env.type` a `produccion` cuando factures de verdad.
+Acordate de pasar `afip.ws.env.type` a `production` cuando factures de verdad.
 En la creación ya no se pregunta localización:
 ahí solo se crea el proyecto (los módulos van por opción 2/3 después).
 Avanzado sin menú: `--localizacion argentina-adhoc` o `argentina-codize`. Tu flujo manual queda horneado en el Dockerfile:
@@ -414,7 +415,7 @@ externa `omc-proxy` y levanta nginx. `omc web --proxy` conecta el sitio:
 + `ports` → `expose` + `proxy_mode`, escribe el site día-1 en
 `proxy/conf.d/<dominio>.conf`, valida con `nginx -t`, recarga, corre certonly
 **central** (apex + www) y deja el site HTTPS. Si el cert ya existe y no es
-staging, lo conserva sin re-emitir. Renovar todo (cron mensual en host):
+staging, lo conserva sin re-emitir. Renovar todo (cron semanal en host: `0 3 * * 0`):
 
 ```bash
 cd /opt/proxy && docker compose run --rm certbot renew && docker compose exec nginx nginx -s reload
@@ -425,8 +426,9 @@ Reglas duras (fallan limpio, sin escribir a medias):
 - Sin proxy inicializado: `omc proxy init` primero.
 - Proyecto con nginx local: quitarlo o usar `--standalone` (un solo 80/443 por host).
 - 80/443 ocupados (traefik u otro nginx): el proxy no levanta; liberar o no usar proxy.
-- El sitio odoo se levanta **antes** del reload: nginx no carga upstreams que no
-  resuelven, y un reload fallido dejaría caídos a todos los sites.
+- El sitio odoo se levanta **antes** del primer reload (así el site responde
+  de entrada). Después, un backend caído solo tira su propio site (5xx):
+  los upstreams se resuelven por request y el reload nunca voltea al resto.
 
 ### 7.2ter Tutorial: dos subdominios con HTTPS en un host
 
@@ -477,9 +479,12 @@ curl -sI https://app.tienda.com | head -1
 omc list   # ambos proyectos con su DOMINIO
 ```
 
-Paso 7 — mantenimiento: renew centralizado (ver cron en §7.2bis). **Baja de
+Paso 7 — mantenimiento: renew centralizado (ver cron semanal en §7.2bis). **Baja de
 un site**: `rm /opt/proxy/conf.d/<dominio>.conf` + `docker compose exec nginx
-nginx -s reload` en `/opt/proxy` (el cert expira solo, nada más que hacer).
+nginx -s reload` en `/opt/proxy` + `docker compose run --rm certbot delete
+--cert-name <dominio>` (si no, renew sigue intentando un dominio que ya no apunta).
+Nota: si un odoo está caído, solo su site devuelve 5xx; el reload y el resto
+siguen sanos (upstreams por variable, sin bloques estáticos).
 
 Si algo falla (DNS, 80 ocupado, cert fallido que deja día-1 HTTP): ver §12.
 
@@ -527,7 +532,7 @@ USER odoo
 
 ### 9.1 HTTPS (prod con dominio)
 
-Ver §7.2. Renovar (cron mensual en host):
+Ver §7.2. Renovar (cron semanal en host: `0 3 * * 0`):
 
 ```bash
 docker compose run --rm certbot renew && docker compose exec nginx nginx -s reload
@@ -558,10 +563,12 @@ Límites `deploy.resources` en compose (editables vía `ODOO_CPUS/MEM`, `DB_CPUS
 y tuning Postgres (`PG_*` en `.env`, aplicado como `command:` al contenedor db).
 En prod pregunta **vCPUs y RAM del VPS** (sugiere lo local) y reparte: sistema+nginx fijos,
 odoo ~70%CPU/62%RAM, db resto; PG 20%/50% (shared topado al 60% del límite del
-contenedor db para no OOMear en VPS chicos) y workers `2CPU+1` (en `.env` queda `VPS_*`).
+contenedor db para no OOMear en VPS chicos) y workers `min(2CPU+1, RAM_odoo/1GB)`
+(tope 16: cada worker reserva ~1GB para requests pesados; en `.env` queda `VPS_*`).
 `odoo.conf` lleva los límites escalados: `limit_memory_soft` = RAM_odoo/(workers+2)
-(cron + longpolling incluidos; piso 256MB), `limit_memory_hard` = soft×1.25
-(regla foro Odoo "Server specifications": 1 worker ~= 6 usuarios concurrentes).
+(cron + longpolling incluidos; piso 256MB), `limit_memory_hard` = max(soft×1.25, 768MB)
+(regla foro Odoo "Server specifications": 1 worker ~= 6 usuarios concurrentes;
+el piso de 768MB cubre reportes/exportaciones grandes).
 Avanzado sin menú: `--vcpus`, `--ram-gb`, `--odoo-cpus/mem`, `--db-cpus/mem`.
 
 ### 9.4 Duplicar instancia (módulos + datos)
@@ -646,6 +653,9 @@ docker compose exec db pg_dump -U odoo postgres > backup.sql
 | git pide `Username/Password` en loop (o `Authentication failed`) | Privado sin token válido (o expirado/sin scope) | Menú 7 (validar token, scope `repo`/Contents, org = tu usuario) o `export GITHUB_TOKEN=...`; git ya no pregunta, falla rápido con el motivo |
 | Módulo NO existe en repo@rama | Nombre mal o sin esa rama (u org equivocado) | Se omite sin guardar; re-listar (el `--org` manda) |
 | Deploy "colgado" | Primer build tarda (pull + pip) sin salida | Progreso ahora en vivo; esperar o revisar `docker ps` |
+| Proxy no levanta: `Bind 0.0.0.0:80/443 failed` | Otro publicador (traefik, otro nginx) | Un solo 80/443 por host: liberar o no usar proxy |
+| Un site en 502, el resto OK | Su odoo caído | Aislamiento por diseño (resolver+variable): levantar ese proyecto, el proxy no se toca |
+| Cert fallido en `web --proxy` | DNS o puerto 80 | Queda día-1 HTTP; reintentar cuando resuelva (con `--staging` primero si dudás) |
 
 Filas ya resueltas en plantillas/código (pg `-d postgres`, `cron_name`, PEP 668,
 git por apt, `odoo.conf` sin `:ro`, sin `logfile` en 19): ver [CHANGELOG.md](CHANGELOG.md).
