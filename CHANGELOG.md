@@ -1,5 +1,13 @@
 # CHANGELOG — Odoo Manager Compose (OMC)
 
+## [Sin publicar]
+
+- **Proxy multinstancia (nginx compartido)**: nuevo proyecto central `proxy`
+  (`omc proxy init`: compose + red externa `omc-proxy` + nginx único en 80/443),
+  `omc web --proxy/--standalone`, sites por subdominio en `conf.d/` con TLS
+  centralizado (certonly apex + www, reuso sin re-emitir, renew por cron),
+  templates nginx parametrizados con `{{ODOO_HOST}}`. Opción 11 del menú.
+
 ## [1.0.0]
 
 Primera versión documentada: asistente + menú en loop, creación/operación de
