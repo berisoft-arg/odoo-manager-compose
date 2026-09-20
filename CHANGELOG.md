@@ -9,6 +9,15 @@
   templates nginx parametrizados con `{{ODOO_HOST}}`; sites proxy sin
   `upstream`: `resolver 127.0.0.11` + `proxy_pass` con variable (un backend
   caído no voltea al resto). Opción 11 del menú.
+- **Seguridad en restore**: `odoo neutralize -d` opt-in solo-dev
+  (`--neutralizar`, pregunta default NO).
+- **Agentes**: `AGENTS.md` por proyecto, `omc list/doctor --json` (doctor exit 2
+  con errores), `omc logs/update/test`, resumen de omitidos y drift en `sync`,
+  aviso de conflictos de versiones en requirements.
+- **Reproducibilidad**: SHA fijado en `repos.json` (+ export en bundle),
+  aviso de drift con `omc addons pull` para actualizar.
+- **Mailpit en dev**: buzón local (`:8025`, SMTP interno 1025), `list_db = False`,
+  `.env.example` sin secretos.
 
 ## [1.0.0]
 

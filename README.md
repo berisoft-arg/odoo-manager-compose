@@ -80,7 +80,8 @@ omc                 # abre el menú
 Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup.
 
 Menú avanzado (subcomandos directos como `omc crear --flags`,
-`omc doctor --fix`): ver [Manual-OMC](Manual-OMC.md).
+`omc doctor --fix`): ver [Manual-OMC](Manual-OMC.md). Para agentes/CI:
+`omc list/doctor --json`, `omc logs/update/test` y `AGENTS.md` por proyecto.
 
 ## Estructura del repo
 

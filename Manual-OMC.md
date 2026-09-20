@@ -65,8 +65,9 @@ mi-proyecto/
     cybrosys/<repo>/        # clones sparse Cybrosys
     mates/<repo>/           # clones sparse Odoo Mates
     codize/<repo>/          # clones sparse Codize
-    repos.json              # estado: repos/módulos/ramas (para pull y export)
+    repos.json              # estado: repos/módulos/ramas/SHA (para pull y export)
   odoo-addons.py            # stub que delega en `omc addons` (sparse-checkout)
+  AGENTS.md                 # guía para agentes (logs/update/test, reglas prod)
   addons-bundle.json        # bundle con lo instalado (se genera solo; para clonar instancias)
   addons-bundle.ejemplo.json# plantilla para llenar
   requirements-odoo.txt      # deps Python detectadas (si hay)
@@ -90,6 +91,7 @@ addons_path = /mnt/extra-addons/custom,/mnt/extra-addons,/mnt/extra-addons/adhoc
 | recursos | 1 CPU / 2G odoo | 2 CPU / 4G odoo (+ límites en db y nginx) |
 | web | directa en `ODOO_PORT` | nginx + certbot opcional por dominio |
 | backups | script local | script + rclone a Drive |
+| mail | Mailpit dev (`:8025`, SMTP interno 1025, nada real sale) | real (configurar en Odoo) |
 
 ---
 
@@ -357,6 +359,9 @@ sin pisar; avisa si `workers = 0` porque el runner no arranca). Vale al instalar
 por cualquier vía (opción 2, `add`, `bundle`, sync, crear con flags).
 Auto-genera `addons-bundle.json` si falta y auto-actualiza el helper viejo del proyecto.
 Si lo corres fuera del proyecto, te dice a cuál entrar (`cd <proyecto>` o `--proyecto`).
+Al final resume módulos no descargados y repos con drift (remoto avanzado desde
+el SHA fijado: `omc addons pull` actualiza). Cada repo guarda su `sha` en
+`addons/repos.json` (y en el bundle exportado) para reproducibilidad.
 
 ### 7.2 Configurar web después (nginx + certbot)
 
@@ -554,6 +559,9 @@ docker compose run --rm certbot renew && docker compose exec nginx nginx -s relo
 # Rclone: host si está, si no el servicio `rclone` del compose (perfil backup).
 # Rclone sale del compose (servicio `rclone`, perfil `backup`): **nada que instalar en host**.
 # Menú 5 lo configura (incluso dentro del servicio) y verifica el remote.
+# Neutralizar (solo dev): `./scripts/restore.sh <bd> <tgz> --neutralizar`
+# apaga crons y mail en la BD restaurada. Sin flag pregunta (default NO).
+# Avanzado: `omc restore --proyecto <ruta> --neutralizar`.
 # Cron: 0 3 * * * cd /ruta/<proyecto> && ./scripts/backup.sh <bd> >> backups/cron.log 2>&1
 ```
 
@@ -755,8 +763,18 @@ Diagnóstico directo (atajos sin menú):
 
 ```bash
 omc list           # lista instancias en la raíz de proyectos ($OMC_PROJECTS, default /opt)
-omc doctor         # valida compose/conf/addons/.env por instancia
+omc list --json    # salida máquina (agentes/CI)
+omc doctor         # valida compose/conf/addons/.env por instancia (exit 2 si hay errores)
+omc doctor --json  # salida máquina (agentes/CI)
 omc doctor --fix   # repara addons_path si hace falta
+```
+
+Ciclo corto por proyecto (avanzado sin menú, ideal agentes):
+
+```bash
+omc logs [--servicio odoo] [--tail 200]   # follow (Ctrl+C sale)
+omc update <modulo> [--db <bd>]           # -u en contenedor efímero + restart
+omc test <modulo> [--db <bd>]             # --test-enable en contenedor efímero
 ```
 
 **En venv aislado (recomendado fuera de desarrollo):**

@@ -127,3 +127,27 @@ docker compose exec -T db psql -U odoo -d "$BD" -tAX -c "SELECT count(*) FROM ir
   && echo "(módulos instalados arriba)"
 echo "✓ Restaurado. Revisa: docker compose logs -f odoo"
 echo "  Ojo: si es otro servidor, ajusta web.base.url en Ajustes > Parámetros del sistema."
+
+# --- Neutralizar (opcional, SOLO copias de desarrollo) ---
+# Apaga crons y servidores de mail en la BD para que nada real se dispare
+# (mails a clientes, webhooks). JAMÁS en producción.
+NEUTRALIZAR=""
+for _a in "$@"; do
+  case "$_a" in
+    --neutralizar) NEUTRALIZAR=si ;;
+    --sin-neutralizar) NEUTRALIZAR=no ;;
+  esac
+done
+if [ -z "$NEUTRALIZAR" ] && [ -t 0 ]; then
+  read -rp "¿Neutralizar '$BD' (copia dev: apaga crons y mail)? [s/N]: " _n || true
+  case "${_n:-}" in
+    s|S|si|SI|y|Y|yes|YES) NEUTRALIZAR=si ;;
+    *) NEUTRALIZAR=no ;;
+  esac
+fi
+if [ "${NEUTRALIZAR:-no}" = "si" ]; then
+  echo "== Neutralizando '$BD' (solo dev) =="
+  docker compose exec -T odoo odoo neutralize -d "$BD" \
+    && echo "(neutralizada: sin crons ni mails reales)" \
+    || echo "AVISO: falló neutralize (a mano: docker compose exec odoo odoo neutralize -d $BD)."
+fi

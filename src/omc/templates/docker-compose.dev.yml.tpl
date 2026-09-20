@@ -41,6 +41,11 @@ services:
       - ./config/odoo.conf:/etc/odoo/odoo.conf
       - odoo-data:/var/lib/odoo
 {{ODOO_DEPLOY}}    command: odoo --dev=all
+  mailpit:
+    image: axllent/mailpit
+    restart: "no"
+    ports:
+      - "{{MAILPIT_PORT}}:8025"  # UI buzón dev (SMTP en 1025, solo red interna)
 {{RCLONE_SERVICE}}volumes:
   odoo-db-data:
   odoo-data:

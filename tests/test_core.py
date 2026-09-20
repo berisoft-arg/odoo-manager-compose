@@ -56,6 +56,22 @@ def test_normalizar_req():
     assert normalizar_req("Pillow>=2.0") == "Pillow>=2.0"
 
 
+def test_detectar_conflictos():
+    from omc.manifest import detectar_conflictos
+    assert detectar_conflictos(["httplib2>=0.7", "click>=8.0"]) == []
+    assert detectar_conflictos(["a==1.0"]) == []
+    assert detectar_conflictos(["git+https://x/y", "-r other.txt", ""]) == []
+    assert detectar_conflictos(["pysimplesoap==1.8.14", "pysimplesoap==1.8.22"]) != []
+    assert detectar_conflictos(["x==1.0", "x!=1.0"]) != []
+    assert detectar_conflictos(["x==1.0", "x>=2.0"]) != []
+    assert detectar_conflictos(["x==2.0", "x<2.0"]) != []
+    assert detectar_conflictos(["x==1.5", "x~=1.4.2"]) != []
+    assert detectar_conflictos(["x==1.4.9", "x~=1.4.2"]) == []
+    assert detectar_conflictos(["x==1.0", "x>=1.0", "x"]) == []
+    msg = detectar_conflictos(["a==1.0", "a==2.0"])[0]
+    assert "a:" in msg and "1.0" in msg and "2.0" in msg
+
+
 def test_es_url():
     assert es_url("https://github.com/x/y")
     assert es_url("git@github.com:x/y.git")
@@ -66,7 +82,7 @@ def test_templates_render_sin_residuos():
     from omc.compose import generar_compose
     mapping_dev = {
         "PROYECTO": "test", "ODOO_VERSION": "18", "ODOO_IMAGE": "odoo:18",
-        "POSTGRES_IMAGE": "postgres:16", "ODOO_PORT": "8069", "ODOO_GEVENT_PORT": "8072",
+        "POSTGRES_IMAGE": "postgres:16",         "ODOO_PORT": "8069", "ODOO_GEVENT_PORT": "8072", "MAILPIT_PORT": "8025",
         "ADDONS_PATH": "/mnt/extra-addons", "PG_SHARED_BUFFERS": "128MB",
         "PG_EFFECTIVE_CACHE": "512MB", "PG_WORK_MEM": "8MB", "PG_MAINT_MEM": "64MB",
         "PG_MAX_CONN": "50", "DB_DEPLOY": "", "ODOO_DEPLOY": "", "ODOO_BUILD_OR_IMAGE": "image: odoo:18",
@@ -74,8 +90,10 @@ def test_templates_render_sin_residuos():
     }
     dev = generar_compose("desarrollo", mapping_dev)
     assert "{{" not in dev
+    assert "mailpit:" in dev and '"8025:8025"' in dev  # buzón solo en dev
     prod = generar_compose("produccion", {**mapping_dev, "ODOO_PORTS": '    expose:\n      - "8069"\n', "NGINX_SERVICES": ""})
     assert "{{" not in prod
+    assert "mailpit" not in prod
 
 
 def test_reparto_limites_memoria():

@@ -70,12 +70,14 @@ from .gitutils import (
     git_pull,
     git_red,
     list_remote_topdirs,
+    remote_head,
     run,
 )
 from .manifest import (
     leer_manifest,
     normalizar_req,
     quitar_m2crypto,
+    detectar_conflictos,
     iterar_modulos,
     analizar_depends,
     load_repos,
@@ -531,6 +533,9 @@ def escanear_externas(proyecto):
             "  (M2Crypto fuera del pip: va por apt python3-m2crypto;"
             " la localización AR lo pone en el Dockerfile)"
         )
+    for _conf in detectar_conflictos(out_reqs):
+        print(f"  ⚠ Conflicto de versiones: {_conf} (el build fallará en pip;"
+              " fija un pin común)")
     req_file = proyecto / "requirements-odoo.txt"
     if out_reqs:
         req_file.write_text("\n".join(out_reqs) + "\n", encoding="utf-8")
@@ -1320,6 +1325,9 @@ def run_check_deps(args):
             "  (M2Crypto fuera del pip: va por apt python3-m2crypto;"
             " la localización AR lo pone en el Dockerfile)"
         )
+    for _conf in detectar_conflictos(out_reqs):
+        print(f"  ⚠ Conflicto de versiones: {_conf} (el build fallará en pip;"
+              " fija un pin común)")
     req_file = proyecto / "requirements-odoo.txt"
     if out_reqs:
         req_file.write_text("\n".join(out_reqs) + "\n", encoding="utf-8")
@@ -1938,6 +1946,45 @@ def run_sync(args):
             print("✓ Odoo reiniciado. Actualiza la lista de aplicaciones en la UI.")
         else:
             print("⚠ Falló el restart. Revisa: docker compose ps")
+    # 5) resumen: registrados pero ausentes en disco (omitidos o desaparecidos de la rama)
+    try:
+        from .manifest import load_repos
+        faltantes = []
+        for _r in load_repos(proyecto):
+            _base = proyecto / (_r.get("path") or "")
+            if not _r.get("path"):
+                continue
+            if _r.get("single"):
+                if not _base.is_dir():
+                    faltantes.append(f"{_r.get('repo')}/(repo)")
+                continue
+            for _m in _r.get("modules", []):
+                if _m and not (_base / _m).is_dir():
+                    faltantes.append(f"{_r.get('repo')}/{_m}")
+        if faltantes:
+            print(f"\n⚠ Módulos registrados pero no descargados ({len(faltantes)}): "
+                  f"{' '.join(sorted(set(faltantes)))}")
+            print("  Revisá rama del repo o nombre (pudo desaparecer de la rama).")
+        else:
+            print("\n✓ Todos los módulos registrados están en disco.")
+        # drift: repos cuyo remoto avanzó desde lo fijado (omc addons pull actualiza)
+        try:
+            movidos = []
+            for _r in load_repos(proyecto):
+                _url, _br, _sha = _r.get("url", ""), _r.get("branch", ""), _r.get("sha", "")
+                if not (_url and _br and _sha):
+                    continue
+                _rem = remote_head(_url, _br)
+                if _rem and _rem != _sha:
+                    movidos.append(f"{_r.get('repo')}@{_br} ({_sha[:7]}→{_rem[:7]})")
+            if movidos:
+                print(f"\n⚠ Repos con cambios upstream ({len(movidos)}): "
+                      f"{' '.join(sorted(set(movidos)))}")
+                print("  Mismo bundle, distinto código: `omc addons pull` para actualizar.")
+        except Exception:  # noqa: BLE001
+            pass
+    except Exception:  # noqa: BLE001
+        pass
 
 
 def run_export_bundle(args):
@@ -2067,6 +2114,10 @@ def run_pull(args):
             continue
         print(f"Pull {r['path']} ({r['branch']}) ...")
         git_pull(str(p))
+        from .manifest import anotar_sha
+        anotar_sha(r, p)
+    from .manifest import save_repos
+    save_repos(proyecto, repos)
     print("Listo. Reinicia: docker compose restart odoo")
 
 
@@ -2270,6 +2321,13 @@ def run_list(args):
                               env.get("ENTORNO", "?"), env.get("DOMINIO", "")))
     except OSError:
         pass
+    if getattr(args, "json", False):
+        import json as _json
+        print(_json.dumps([
+            {"nombre": n, "odoo": v, "puerto": p, "entorno": e, "dominio": dom}
+            for n, v, p, e, dom in projs
+        ]))
+        return
     if not projs:
         print(f"No hay proyectos en {base}")
         return
@@ -2292,8 +2350,11 @@ def run_doctor(args):
         except OSError:
             targets = []
     ok_all = True
+    report = []
+    machine = bool(getattr(args, "json", False))
     for proj in targets:
-        print(f"\n== {proj.name} ==")
+        if not machine:
+            print(f"\n== {proj.name} ==")
         errs = []
         if not (proj / "docker-compose.yml").exists():
             errs.append("falta docker-compose.yml")
@@ -2305,7 +2366,8 @@ def run_doctor(args):
                 if r.returncode != 0:
                     errs.append(f"compose config falla: {(r.stderr or '')[:200]}")
             except FileNotFoundError:
-                print("  · docker no disponible: no se validó compose")
+                if not machine:
+                    print("  · docker no disponible: no se validó compose")
         if not (proj / "config" / "odoo.conf").exists():
             errs.append("falta config/odoo.conf")
         else:
@@ -2331,19 +2393,30 @@ def run_doctor(args):
             try:
                 from .addonsops import actualizar_addons_path
                 actualizar_addons_path(proj)
-                print("  fix: addons_path actualizado")
+                if not machine:
+                    print("  fix: addons_path actualizado")
             except Exception as _e:  # noqa: BLE001
-                print(f"  fix falló: {_e}")
+                if not machine:
+                    print(f"  fix falló: {_e}")
         if errs:
             ok_all = False
-            for e in errs:
-                print(f"  ✗ {e}")
-        else:
+            if not machine:
+                for e in errs:
+                    print(f"  ✗ {e}")
+        elif not machine:
             print("  ✓ OK")
+        report.append({"proyecto": proj.name, "ok": not errs, "errores": errs})
+    if machine:
+        import json as _json
+        print(_json.dumps(report))
+        if not ok_all:
+            sys.exit(2)
+        return
     if not ok_all:
         print("\nDoctor: hay errores (ver arriba).")
         if not args.fix:
             print("Prueba con --fix para reparar addons_path.")
+        sys.exit(2)
     else:
         print("\nDoctor: todo OK.")
 
@@ -2510,7 +2583,83 @@ def run_restore(args):
     if not script.exists():
         print(f"  ⚠ {script} no existe (proyecto sin backups configurados).")
         return
-    subprocess.run(["./scripts/restore.sh"], cwd=str(proj))
+    flags = []
+    if getattr(args, "neutralizar", False):
+        flags.append("--neutralizar")
+    if getattr(args, "sin_neutralizar", False):
+        flags.append("--sin-neutralizar")
+    subprocess.run(["./scripts/restore.sh"] + flags, cwd=str(proj))
+
+
+def _elegir_bd(proj: Path, db_arg, que: str) -> str:
+    """BD desde --db o pick interactivo (lista de postgres). Sin tty exige --db."""
+    if db_arg:
+        return str(db_arg).strip()
+    bds = []
+    try:
+        r = subprocess.run(
+            ["docker", "compose", "exec", "-T", "db", "psql", "-U", "odoo",
+             "-d", "postgres", "-tAX", "-c",
+             "SELECT datname FROM pg_database WHERE datistemplate=false "
+             "AND datname NOT IN ('postgres');"],
+            cwd=str(proj), text=True, stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL, timeout=30)
+        if r.returncode == 0:
+            bds = [b.strip() for b in (r.stdout or "").splitlines() if b.strip()]
+    except Exception:  # noqa: BLE001
+        pass
+    if not bds:
+        sys.exit(f"No pude listar BDs de {proj.name} (¿db arriba?). Pasá --db <nombre>.")
+    if len(bds) == 1:
+        print(f"  BD: {bds[0]} (única).")
+        return bds[0]
+    if not es_interactivo():
+        sys.exit(f"Indicá la BD con --db (hay: {' '.join(bds)}).")
+    el = ask_opcion(f"¿BD para {que}?", bds, bds[0])
+    return el
+
+
+def run_logs(args):
+    """Logs del proyecto (follow). Corto para el ciclo típico."""
+    proj = _resolver_proyecto(args)
+    servicio = getattr(args, "servicio", None) or "odoo"
+    tail = getattr(args, "tail", None) or 200
+    print(f"Logs de {servicio} (Ctrl+C para salir).")
+    subprocess.run(["docker", "compose", "logs", "-f", f"--tail={tail}", servicio],
+                   cwd=str(proj))
+
+
+def run_update(args):
+    """Actualiza un módulo (-u) en contenedor efímero. Pide --db si falta."""
+    proj = _resolver_proyecto(args)
+    mod = getattr(args, "modulo", None)
+    if not mod:
+        sys.exit("Indicá el módulo: omc update <modulo> [--db <bd>].")
+    bd = _elegir_bd(proj, getattr(args, "db", None), f"actualizar {mod}")
+    print(f"Actualizando {mod} en {bd} ...")
+    r = subprocess.run(["docker", "compose", "run", "--rm", "odoo",
+                        "odoo", "-d", bd, "-u", mod, "--stop-after-init"],
+                       cwd=str(proj))
+    if r.returncode != 0:
+        sys.exit(f"Falló el update de {mod} (revisá el log de arriba).")
+    print(f"✓ {mod} actualizado. Reiniciá: docker compose restart odoo")
+
+
+def run_test(args):
+    """Corre tests de un módulo (--test-enable) en contenedor efímero."""
+    proj = _resolver_proyecto(args)
+    mod = getattr(args, "modulo", None)
+    if not mod:
+        sys.exit("Indicá el módulo: omc test <modulo> [--db <bd>].")
+    bd = _elegir_bd(proj, getattr(args, "db", None), f"testear {mod}")
+    print(f"Testeando {mod} en {bd} ...")
+    r = subprocess.run(["docker", "compose", "run", "--rm", "odoo",
+                        "odoo", "-d", bd, "-u", mod,
+                        "--test-enable", "--stop-after-init"],
+                       cwd=str(proj))
+    if r.returncode != 0:
+        sys.exit(f"Fallaron los tests de {mod} (revisá el log de arriba).")
+    print(f"✓ Tests de {mod} OK.")
 
 
 def run_list_modules(args):
@@ -2632,6 +2781,10 @@ def crear_proyecto(args):
         print(f"  Gevent  : host {gevent_port} → contenedor 8072")
     else:
         gevent_port = 8072  # no se expone en prod, solo referencia
+    # Mailpit solo en dev (buzón local: ningún mail real sale del VPS)
+    mailpit_port = puerto_libre(8025) if entorno == "desarrollo" else 8025
+    if entorno == "desarrollo":
+        print(f"  Mailpit : host {mailpit_port} → buzón dev (SMTP interno 1025)")
     if args.password:
         print("Aviso: --password por argv es visible en `ps`; preferí ODOO_DB_PASSWORD en env.", file=sys.stderr)
         pg_password = args.password
@@ -2776,6 +2929,7 @@ def crear_proyecto(args):
         "POSTGRES_IMAGE": info["postgres"],
         "ODOO_PORT": str(puerto),
         "ODOO_GEVENT_PORT": str(gevent_port),
+        "MAILPIT_PORT": str(mailpit_port),
         "ADDONS_PATH": base_addons_path,
         "ADMIN_PASSWD": admin_passwd,
         "PG_PASSWORD": pg_password,
@@ -2866,6 +3020,7 @@ def crear_proyecto(args):
         f"POSTGRES_PASSWORD={pg_password}",
         f"ODOO_PORT={puerto}",
         f"ODOO_GEVENT_PORT={gevent_port}",
+        f"MAILPIT_PORT={mailpit_port}",
         f"PG_SHARED_BUFFERS={pg['PG_SHARED_BUFFERS']}",
         f"PG_EFFECTIVE_CACHE={pg['PG_EFFECTIVE_CACHE']}",
         f"PG_WORK_MEM={pg['PG_WORK_MEM']}",
@@ -2925,6 +3080,8 @@ def crear_proyecto(args):
         encoding="utf-8")
     (salida / "README.md").write_text(readme, encoding="utf-8")
     (salida / ".gitignore").write_text(gitignore, encoding="utf-8")
+    (salida / "AGENTS.md").write_text(
+        render(cargar_template("agents-proyecto.md.tpl"), mapping), encoding="utf-8")
     print("\nArchivos creados:")
     for f in [
         "docker-compose.yml",
@@ -2932,6 +3089,7 @@ def crear_proyecto(args):
         ".env",
         "README.md",
         ".gitignore",
+        "AGENTS.md",
         "addons/custom/.gitkeep",
         "addons/oca/.gitkeep",
         "addons/adhoc/.gitkeep",

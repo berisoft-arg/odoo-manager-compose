@@ -45,6 +45,16 @@ def save_repos(proyecto, repos: list) -> None:
     tmp.replace(f)
 
 
+def anotar_sha(entry: dict, dest) -> None:
+    """Fija el SHA descargado en la entrada de repos.json (reproducibilidad)."""
+    from .gitutils import git_sha
+    dest = dest if isinstance(dest, Path) else Path(dest)
+    if dest.is_dir():
+        sha = git_sha(dest)
+        if sha:
+            entry["sha"] = sha
+
+
 def leer_manifest(mod_dir: Path):
     """Lee __manifest__.py y devuelve dict (o {})."""
     import ast
@@ -81,6 +91,91 @@ def quitar_m2crypto(reqs: list) -> tuple:
         return re.split(r"[=<>;\s\[]", l.strip(), 1)[0].strip().lower()
     sacadas = [l for l in reqs if _base(l) == "m2crypto"]
     return [l for l in reqs if _base(l) != "m2crypto"], sacadas
+
+
+def _num(ver: str) -> tuple:
+    """Tupla comparable de la parte numérica ('1.8.22' -> (1, 8, 22))."""
+    partes = []
+    for tok in re.split(r"[.]", ver.strip().split("+")[0].split("-")[0]):
+        m = re.match(r"(\d+)", tok)
+        partes.append(int(m.group(1)) if m else 0)
+    return tuple(partes) or (0,)
+
+
+def detectar_conflictos(reqs: list) -> list:
+    """Pins incompatibles del mismo paquete (solo stdlib, sin pip).
+
+    Agrupa por nombre base y compara especificadores (==, !=, >=, <=, >, <, ~=).
+    Devuelve descripciones humanas; vacío si no hay choque probable. No falla
+    ante líneas git/URL/flags: esas se ignoran.
+    """
+    from collections import defaultdict
+    grupos = defaultdict(list)
+    for l in reqs:
+        s = l.strip()
+        if (not s or s.startswith(("#", "-", "."))
+                or s.startswith(("git+", "http://", "https://"))):
+            continue
+        m = re.match(r"^([A-Za-z0-9_.-]+)\s*(.*)$", s)
+        if not m:
+            continue
+        nombre, resto = m.group(1).lower(), m.group(2).strip()
+        resto = resto.split(";")[0].strip()  # markers fuera
+        if not resto:
+            continue
+        grupos[nombre].append((s, resto))
+    hallados = []
+    for nombre, pares in grupos.items():
+        if len(pares) < 2:
+            continue
+        fijos = []
+        for original, spec in pares:
+            for parte in spec.split(","):
+                parte = parte.strip()
+                m = re.match(r"^(==|!=|>=|<=|>|<|~=|===)\s*([^\s,;]+)", parte)
+                if m:
+                    fijos.append((m.group(1), m.group(2), original))
+        vistos = set()
+        for i, (op1, v1, o1) in enumerate(fijos):
+            for op2, v2, o2 in fijos[i + 1:]:
+                n1, n2 = _num(v1), _num(v2)
+                choca = False
+                if op1 == "==" and op2 == "==" and n1 != n2:
+                    choca = True
+                elif {op1, op2} == {"==", "!="} and n1 == n2:
+                    choca = True
+                elif op1 == "==" and op2 in (">=", ">", "~=") and not _cumple(n1, op2, n2):
+                    choca = True
+                elif op2 == "==" and op1 in (">=", ">", "~=") and not _cumple(n2, op1, n1):
+                    choca = True
+                elif op1 == "==" and op2 in ("<=", "<") and not _cumple(n1, op2, n2):
+                    choca = True
+                elif op2 == "==" and op1 in ("<=", "<") and not _cumple(n2, op1, n1):
+                    choca = True
+                if choca:
+                    clave = tuple(sorted((o1, o2)))
+                    if clave not in vistos:
+                        vistos.add(clave)
+                        hallados.append(f"{nombre}: '{o1}' vs '{o2}'")
+    return hallados
+
+
+def _cumple(ver: tuple, op: str, ref: tuple) -> bool:
+    """True si la versión fija ver satisface op ref (con ~= como compatible)."""
+    if op in (">=", "==="):
+        return ver >= ref
+    if op == ">":
+        return ver > ref
+    if op == "<=":
+        return ver <= ref
+    if op == "<":
+        return ver < ref
+    if op == "~=":
+        n = len(ref)
+        if n <= 1:
+            return ver >= ref
+        return ver[:n - 1] == ref[:n - 1] and ver >= ref
+    return True
 
 
 def iterar_modulos(base: Path):

@@ -22,7 +22,8 @@ def generar_odoo_conf(entorno: str, mapping: dict) -> str:
     m = dict(mapping)
     m["WORKERS"] = "0" if dev else mapping.get("ODOO_WORKERS", "4")
     if dev:
-        m["EXTRA_OPCIONES"] = "; dev: sin workers, recarga activa con --dev=all"
+        m["EXTRA_OPCIONES"] = ("; dev: sin workers, recarga activa con --dev=all\n"
+                               "smtp_server = mailpit\nsmtp_port = 1025")
     else:
         # Límites escalados a los recursos (vienen del reparto; fallback = defaults Odoo)
         m["EXTRA_OPCIONES"] = (

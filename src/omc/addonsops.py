@@ -9,7 +9,7 @@ from .github import git_auth_args, org_desde_url, org_subdir, resolve_repo
 from .gitutils import git_clone, run
 from .manifest import (
     indice_modulos_disco, iterar_modulos, leer_manifest,
-    load_repos, save_repos, base_total,
+    load_repos, save_repos, base_total, anotar_sha,
 )
 
 
@@ -164,6 +164,7 @@ def add_modules(proyecto: Path, org: str, repo: str, url: str, branch: str, modu
         repos.append({"org": "custom", "repo": repo, "url": url, "branch": branch,
                       "path": f"addons/custom/{repo}", "modules": [repo],
                       "single": True})
+        anotar_sha(repos[-1], mono)
         save_repos(proyecto, repos)
         actualizar_addons_path(proyecto)
         print(f"  ✓ {repo} en custom/{repo} (visible vía addons_path)")
@@ -175,6 +176,7 @@ def add_modules(proyecto: Path, org: str, repo: str, url: str, branch: str, modu
         todos = sorted(m for m, _p in iterar_modulos(dest))
         nuevos_todos = [m for m in todos if m not in entry["modules"]]
         entry["modules"] = sorted(set(entry["modules"]) | set(todos))
+        anotar_sha(entry, dest)
         save_repos(proyecto, repos)
         actualizar_addons_path(proyecto)
         for m in todos:
@@ -199,6 +201,7 @@ def add_modules(proyecto: Path, org: str, repo: str, url: str, branch: str, modu
         for m in invalidos:
             print(f"  ⚠ {m}: NO existe en {org}/{repo}@{branch}, omitido (no se guarda en repos.json).")
         entry["modules"] = sorted(set(entry["modules"]) | set(validos))
+        anotar_sha(entry, dest)
         save_repos(proyecto, repos)
 
     actualizar_addons_path(proyecto)
@@ -251,6 +254,8 @@ def bundle_desde_estado(proyecto: Path) -> dict:
         e = {"org": r.get("org", "oca"), "repo": r["repo"], "modules": sorted(r["modules"])}
         if r.get("branch") and r["branch"] != default_branch:
             e["branch"] = r["branch"]
+        if r.get("sha"):
+            e["sha"] = r["sha"]  # informativo: fija lo descargado (sync avisa drift)
         if e["org"].lower() not in ("oca", "adhoc", "cybrosys", "mates", "codize") and r.get("url"):
             e["url"] = r["url"]
         modulos.append(e)

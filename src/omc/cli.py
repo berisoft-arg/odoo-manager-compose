@@ -51,10 +51,17 @@ def build_parser():
         ("monitor", "Monitor web"),
         ("github", "Configurar GitHub"),
         ("backup", "Backup manual"),
-        ("restore", "Restaurar BD"),
     ]:
         s = sub.add_parser(name, help=help_text)
         s.add_argument("--proyecto", default=None)
+
+    re = sub.add_parser("restore", help="Restaurar BD")
+    re.add_argument("--proyecto", default=None)
+    g = re.add_mutually_exclusive_group()
+    g.add_argument("--neutralizar", action="store_true",
+                   help="Neutralizar tras restaurar (solo copias dev: apaga crons y mail)")
+    g.add_argument("--sin-neutralizar", action="store_true",
+                   help="No preguntar por neutralize")
 
     sy = sub.add_parser("sync", help="Descargar módulos y aplicar")
     sy.add_argument("--proyecto", default=None)
@@ -88,10 +95,13 @@ def build_parser():
     a = sub.add_parser("addons", help="Operaciones addons sobre un proyecto")
     a.add_argument("subcmd", nargs=argparse.REMAINDER)
 
-    sub.add_parser("list", help="Lista instancias (proyectos) detectadas")
+    sub.add_parser("list", help="Lista instancias (proyectos) detectadas"
+                       ).add_argument("--json", action="store_true",
+                                      help="Salida máquina JSON")
     d = sub.add_parser("doctor", help="Valida compose/conf/addons por instancia")
     d.add_argument("--proyecto", default=None, help="Solo esa instancia")
     d.add_argument("--fix", action="store_true", help="Repara addons_path si hace falta")
+    d.add_argument("--json", action="store_true", help="Salida máquina JSON")
 
     m = sub.add_parser("migrar", help="Migrar proyecto a nueva versión Odoo (OCA)")
     m.add_argument("--proyecto", default=None)
@@ -106,6 +116,21 @@ def build_parser():
     px.add_argument("accion", nargs="?", default="init", choices=["init"],
                     help="Acción (default: init)")
     px.add_argument("--salida", default=None, help="Carpeta del proxy (default: <proyectos>/proxy)")
+
+    lg = sub.add_parser("logs", help="Logs del proyecto (follow)")
+    lg.add_argument("--proyecto", default=None)
+    lg.add_argument("--servicio", default="odoo", help="Servicio (default: odoo)")
+    lg.add_argument("--tail", type=int, default=200, help="Líneas (default: 200)")
+
+    up = sub.add_parser("update", help="Actualiza un módulo (-u)")
+    up.add_argument("modulo", nargs="?", default=None, help="Módulo a actualizar")
+    up.add_argument("--proyecto", default=None)
+    up.add_argument("--db", default=None, help="Base (si falta, la pide)")
+
+    te = sub.add_parser("test", help="Tests de un módulo (--test-enable)")
+    te.add_argument("modulo", nargs="?", default=None, help="Módulo a testear")
+    te.add_argument("--proyecto", default=None)
+    te.add_argument("--db", default=None, help="Base (si falta, la pide)")
 
     return p
 
@@ -242,6 +267,10 @@ def main(argv=None):
     elif args.cmd == "proxy":
         from .flows import run_proxy_init
         run_proxy_init(getattr(args, "salida", None))
+    elif args.cmd in ("logs", "update", "test"):
+        from .flows import run_logs, run_update, run_test
+        {"logs": run_logs, "update": run_update,
+         "test": run_test}[args.cmd](args)
     elif args.cmd in ("web", "rclone", "monitor", "github", "backup", "restore"):
         from .flows import run_web, run_rclone, run_monitor, run_github, run_backup, run_restore
         {"web": run_web, "rclone": run_rclone, "monitor": run_monitor,

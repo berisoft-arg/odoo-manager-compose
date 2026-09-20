@@ -69,6 +69,38 @@ def git_pull(repo_dir: str, reintentos: int = 1):
         reintentos=reintentos)
 
 
+def git_sha(repo_dir) -> str | None:
+    """SHA del HEAD local (para fijar en repos.json). None si no es repo git."""
+    try:
+        r = subprocess.run(["git", "rev-parse", "HEAD"], cwd=str(repo_dir),
+                           text=True, stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, timeout=30)
+        sha = (r.stdout or "").strip()
+        return sha if r.returncode == 0 and sha else None
+    except Exception:  # noqa: BLE001
+        return None
+
+
+_REMOTE_HEAD_CACHE = {}
+
+
+def remote_head(url: str, branch: str):
+    """SHA remoto de la rama (ls-remote). None si no se puede leer. Con caché."""
+    key = (url or "", branch or "")
+    if key not in _REMOTE_HEAD_CACHE:
+        try:
+            r = subprocess.run(["git"] + git_auth_args(url) +
+                               ["ls-remote", url, f"refs/heads/{branch}"],
+                               text=True, stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, timeout=60,
+                               env=git_env())
+            out = (r.stdout or "").strip().split()
+            _REMOTE_HEAD_CACHE[key] = out[0] if r.returncode == 0 and out else None
+        except Exception:  # noqa: BLE001
+            _REMOTE_HEAD_CACHE[key] = None
+    return _REMOTE_HEAD_CACHE[key]
+
+
 def ramas_version(url: str):
     """Lista ramas X.0 disponibles en el remoto (para sugerir si falta la de tu Odoo)."""
     r = subprocess.run(["git"] + git_auth_args(url) + ["ls-remote", "--heads", url],

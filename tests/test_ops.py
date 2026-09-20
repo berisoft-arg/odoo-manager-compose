@@ -17,6 +17,7 @@ from omc.flows import (
     run_backup,
     run_deps,
     run_restore,
+    run_sync,
     run_web,
     run_rclone,
     run_monitor,
@@ -55,6 +56,118 @@ def test_run_restore_sin_script_avisa(capsys, tmp_path):
     (proj / ".env").write_text("ENTORNO=produccion\n", encoding="utf-8")
     run_restore(SimpleNamespace(proyecto=str(proj)))
     assert "no existe" in capsys.readouterr().out
+
+
+def test_run_sync_resumen_faltantes(monkeypatch, tmp_path, capsys):
+    import json as _json
+    import subprocess as _sp
+    import omc.flows as F
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text(_json.dumps([
+        {"org": "oca", "repo": "server-tools", "url": "https://x/y",
+         "branch": "18.0", "path": "addons/oca/server-tools",
+         "modules": ["auditlog", "desaparecido"]},
+        {"org": "oca", "repo": "vacío", "url": "https://x/z",
+         "branch": "18.0", "path": "addons/oca/vacio", "modules": []},
+    ]), encoding="utf-8")
+    (p / "addons" / "oca" / "server-tools" / "auditlog").mkdir(parents=True)
+    monkeypatch.setattr(F, "run_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_check_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "actualizar_bundle_desde_estado", lambda *a, **k: False)
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: SimpleNamespace(returncode=0))
+    run_sync(SimpleNamespace(proyecto=str(p), bundle="", odoo="", branch="",
+                             yes=True, skip_install=True, no_deploy=False))
+    out = capsys.readouterr().out
+    assert "server-tools/desaparecido" in out
+    assert "no descargados" in out
+
+
+def test_run_sync_avisa_drift(monkeypatch, tmp_path, capsys):
+    import json as _json
+    import subprocess as _sp
+    import omc.flows as F
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text(_json.dumps([
+        {"org": "oca", "repo": "server-tools", "url": "https://x/y",
+         "branch": "18.0", "path": "addons/oca/server-tools",
+         "modules": ["auditlog"], "sha": "a" * 40},
+    ]), encoding="utf-8")
+    (p / "addons" / "oca" / "server-tools" / "auditlog").mkdir(parents=True)
+    monkeypatch.setattr(F, "run_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_check_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "actualizar_bundle_desde_estado", lambda *a, **k: False)
+    monkeypatch.setattr(F, "remote_head", lambda *a, **k: "b" * 40)
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: SimpleNamespace(returncode=0))
+    run_sync(SimpleNamespace(proyecto=str(p), bundle="", odoo="", branch="",
+                             yes=True, skip_install=True, no_deploy=False))
+    out = capsys.readouterr().out
+    assert "cambios upstream" in out
+    assert "omc addons pull" in out
+
+
+def _proj_json(tmp_path, nombre="tienda", env_extra=""):
+    base = tmp_path / "projs"
+    base.mkdir(exist_ok=True)
+    p = base / nombre
+    p.mkdir(exist_ok=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (p / ".env").write_text(
+        "ENTORNO=produccion\nODOO_VERSION=18\nODOO_IMAGE=odoo:18\n"
+        "POSTGRES_IMAGE=postgres:16\nODOO_PORT=8070\n" + env_extra,
+        encoding="utf-8")
+    (p / "config").mkdir(exist_ok=True)
+    (p / "config" / "odoo.conf").write_text("[options]\n", encoding="utf-8")
+    (p / "addons").mkdir(exist_ok=True)
+    (p / "addons" / "repos.json").write_text("[]", encoding="utf-8")
+    return base, p
+
+
+def test_list_json_valido(monkeypatch, tmp_path, capsys):
+    import json as _json
+    from omc.flows import run_list
+    base, _p = _proj_json(tmp_path)
+    monkeypatch.setenv("OMC_PROJECTS", str(base))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    run_list(SimpleNamespace(json=True))
+    data = _json.loads(capsys.readouterr().out)
+    assert data == [{"nombre": "tienda", "odoo": "18", "puerto": "8070",
+                     "entorno": "produccion", "dominio": ""}]
+
+
+def test_doctor_json_y_exit_code(monkeypatch, tmp_path, capsys):
+    import json as _json
+    import pytest
+    from omc.flows import run_doctor
+    base, p = _proj_json(tmp_path)
+    monkeypatch.setenv("OMC_PROJECTS", str(base))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    monkeypatch.setattr("omc.flows.subprocess.run",
+                        lambda *a, **k: SimpleNamespace(returncode=0))
+    run_doctor(SimpleNamespace(proyecto=str(p), fix=False, json=True))
+    data = _json.loads(capsys.readouterr().out)
+    assert data == [{"proyecto": "tienda", "ok": True, "errores": []}]
+    (p / "config" / "odoo.conf").unlink()  # romper
+    with pytest.raises(SystemExit) as e:
+        run_doctor(SimpleNamespace(proyecto=str(p), fix=False, json=True))
+    assert e.value.code == 2
+    data = _json.loads(capsys.readouterr().out)
+    assert data[0]["ok"] is False and data[0]["errores"] != []
+    # modo texto también sale 2 (agentes sin --json)
+    with pytest.raises(SystemExit) as e2:
+        run_doctor(SimpleNamespace(proyecto=str(p), fix=False, json=False))
+    assert e2.value.code == 2
+    assert "hay errores" in capsys.readouterr().out
+
+
+def test_cli_list_doctor_json_flags():
+    from omc.cli import build_parser
+    assert build_parser().parse_args(["list", "--json"]).json is True
+    assert build_parser().parse_args(["list"]).json is False
+    assert build_parser().parse_args(["doctor", "--json"]).json is True
 
 
 def test_run_web_y_rclone_dev_no_ejecutan(capsys, tmp_path):
@@ -906,6 +1019,142 @@ def test_restore_tpl_cubre_fuente_externa():
     assert 'filestore*.tar.gz' in out  # backups ajenos usan .tar.gz, no .tgz
 
 
+def test_restore_tpl_neutralizar_opt_in():
+    import subprocess as _sp
+    from omc.core import render, template_text, sin_renderizar
+    out = render(template_text("restore.sh.tpl"), {"PROYECTO": "demo"})
+    assert sin_renderizar(out) == []
+    assert "odoo neutralize -d" in out
+    assert "--neutralizar" in out and "--sin-neutralizar" in out
+    assert "JAMÁS en producción" in out  # nunca por default
+    r = _sp.run(["bash", "-n", "/dev/stdin"], input=out, text=True,
+                stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, timeout=15)
+    assert r.returncode == 0
+
+
+def test_run_restore_pasa_flags_neutralizar(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    proj = _proj_dev(tmp_path)
+    (proj / ".env").write_text("ENTORNO=produccion\n", encoding="utf-8")
+    (proj / "scripts").mkdir(exist_ok=True)
+    (proj / "scripts" / "restore.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    vistos = []
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: vistos.append(a[0]))
+    run_restore(SimpleNamespace(proyecto=str(proj), neutralizar=True,
+                                sin_neutralizar=False))
+    run_restore(SimpleNamespace(proyecto=str(proj), neutralizar=False,
+                                sin_neutralizar=True))
+    run_restore(SimpleNamespace(proyecto=str(proj)))
+    assert vistos[0] == ["./scripts/restore.sh", "--neutralizar"]
+    assert vistos[1] == ["./scripts/restore.sh", "--sin-neutralizar"]
+    assert vistos[2] == ["./scripts/restore.sh"]
+    capsys.readouterr()
+
+
+def test_cli_restore_flags():
+    from omc.cli import build_parser
+    args = build_parser().parse_args(["restore"])
+    assert args.neutralizar is False and args.sin_neutralizar is False
+    args = build_parser().parse_args(["restore", "--neutralizar"])
+    assert args.neutralizar is True
+    import pytest
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["restore", "--neutralizar", "--sin-neutralizar"])
+
+
+def _proj_short(tmp_path):
+    p = tmp_path / "proj"
+    p.mkdir(exist_ok=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    return p
+
+
+def test_cli_logs_update_test():
+    from omc.cli import build_parser
+    a = build_parser().parse_args(["logs"])
+    assert (a.servicio, a.tail) == ("odoo", 200)
+    a = build_parser().parse_args(["logs", "--servicio", "db", "--tail", "50"])
+    assert (a.servicio, a.tail) == ("db", 50)
+    a = build_parser().parse_args(["update", "sale", "--db", "midb"])
+    assert (a.modulo, a.db) == ("sale", "midb")
+    a = build_parser().parse_args(["test"])
+    assert a.modulo is None and a.db is None
+
+
+def test_run_logs(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    from omc.flows import run_logs
+    p = _proj_short(tmp_path)
+    vistos = []
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: vistos.append((a[0], k.get("cwd"))))
+    run_logs(SimpleNamespace(proyecto=str(p)))
+    run_logs(SimpleNamespace(proyecto=str(p), servicio="db", tail=50))
+    assert vistos[0] == (["docker", "compose", "logs", "-f", "--tail=200", "odoo"],
+                         str(p))
+    assert vistos[1][0][-2:] == ["--tail=50", "db"]
+    assert "Ctrl+C" in capsys.readouterr().out
+
+
+def test_run_update_y_test(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    from omc.flows import run_update, run_test
+    p = _proj_short(tmp_path)
+    vistos = []
+
+    def _ok(*a, **k):
+        vistos.append(a[0])
+        return SimpleNamespace(returncode=0)
+
+    monkeypatch.setattr(_sp, "run", _ok)
+    run_update(SimpleNamespace(proyecto=str(p), modulo="sale", db="midb"))
+    run_test(SimpleNamespace(proyecto=str(p), modulo="sale", db="midb"))
+    assert vistos[0] == ["docker", "compose", "run", "--rm", "odoo",
+                         "odoo", "-d", "midb", "-u", "sale", "--stop-after-init"]
+    assert vistos[1] == ["docker", "compose", "run", "--rm", "odoo",
+                         "odoo", "-d", "midb", "-u", "sale",
+                         "--test-enable", "--stop-after-init"]
+    assert "Reiniciá: docker compose restart odoo" in capsys.readouterr().out
+    import pytest
+    with pytest.raises(SystemExit):
+        run_update(SimpleNamespace(proyecto=str(p), modulo=None, db="midb"))
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: SimpleNamespace(returncode=1))
+    with pytest.raises(SystemExit):
+        run_test(SimpleNamespace(proyecto=str(p), modulo="sale", db="midb"))
+
+
+def test_elegir_bd(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    from omc.flows import _elegir_bd
+    p = _proj_short(tmp_path)
+    assert _elegir_bd(p, "midb", "x") == "midb"  # flag manda
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: SimpleNamespace(returncode=1,
+                                                                   stdout=""))
+    import pytest
+    with pytest.raises(SystemExit) as e:
+        _elegir_bd(p, None, "x")
+    assert "--db" in str(e.value.code)
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: SimpleNamespace(returncode=0,
+                                                                   stdout="midb\n"))
+    assert _elegir_bd(p, None, "x") == "midb"  # única: auto
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: SimpleNamespace(
+        returncode=0, stdout="a\nb\n"))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: False)
+    with pytest.raises(SystemExit):
+        _elegir_bd(p, None, "x")  # varias + no tty: exige --db
+    capsys.readouterr()
+
+
+def test_agents_proyecto_render_sin_residuos():
+    from omc.core import render, template_text, sin_renderizar
+    out = render(template_text("agents-proyecto.md.tpl"),
+                 {"PROYECTO": "demo", "ODOO_VERSION": "18", "MAILPIT_PORT": "8025"})
+    assert sin_renderizar(out) == []
+    assert "docker compose logs -f odoo" in out
+    assert "omc test <modulo>" in out and "--test-enable" in out
+    assert "--neutralizar" in out
+    assert "demo" in out
+
+
 def test_generar_odoo_conf_usa_limites_del_reparto():
     from omc.compose import generar_odoo_conf
     conf = generar_odoo_conf("produccion", {"ODOO_LIMIT_SOFT": "111",
@@ -918,6 +1167,7 @@ def test_generar_odoo_conf_usa_limites_del_reparto():
     conf_dev = generar_odoo_conf("desarrollo", {})
     assert "limit_memory" not in conf_dev and "workers = 0" in conf_dev
     assert "list_db = False" in conf_dev  # también en dev
+    assert "smtp_server = mailpit" in conf_dev and "smtp_port = 1025" in conf_dev
 
 
 def test_env_ejemplo_sin_residuos_ni_secretos():

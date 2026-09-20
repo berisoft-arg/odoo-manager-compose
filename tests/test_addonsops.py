@@ -1,9 +1,87 @@
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from omc.addonsops import add_modules
+
+
+def _repo_local(tmp_path, nombre="mirepo", modulo="mimod"):
+    """Repo git local con un módulo (origen file://, sin red). Devuelve (url, sha)."""
+    import subprocess as _sp
+    org = tmp_path / "origin"
+    (org / modulo).mkdir(parents=True)
+    (org / modulo / "__manifest__.py").write_text("{'name': 'x'}", encoding="utf-8")
+    _sp.run(["git", "init", "-q", "-b", "main"], cwd=str(org), check=True)
+    _sp.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "add", "."],
+            cwd=str(org), check=True)
+    _sp.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+             "uno"], cwd=str(org), check=True)
+    sha = _sp.run(["git", "rev-parse", "HEAD"], cwd=str(org), capture_output=True,
+                  text=True, check=True).stdout.strip()
+    return f"file://{org}", sha
+
+
+def test_git_sha_repo_local(tmp_path):
+    from omc.gitutils import git_sha, remote_head
+    from omc.gitutils import _REMOTE_HEAD_CACHE
+    url, sha = _repo_local(tmp_path)
+    assert git_sha(tmp_path / "origin") == sha
+    assert git_sha(tmp_path / "no-existe") is None
+    assert remote_head(url, "main") == sha  # file:// sin red
+    _REMOTE_HEAD_CACHE.clear()
+
+
+def test_add_modules_guarda_sha(tmp_path):
+    from omc.manifest import load_repos
+    url, sha = _repo_local(tmp_path)
+    p = tmp_path / "proj"
+    ok, fail = add_modules(p, "otro", "mirepo", url, "main", ["mimod"])
+    assert ok == ["mimod"] and fail == []
+    repos = load_repos(p)
+    assert len(repos) == 1 and repos[0]["sha"] == sha
+
+
+def test_pull_actualiza_sha(tmp_path):
+    import subprocess as _sp
+    from omc.flows import run_pull
+    from omc.manifest import load_repos
+    url, _sha1 = _repo_local(tmp_path)
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    from omc.addonsops import add_modules as _add
+    _add(p, "otro", "mirepo", url, "main", ["mimod"])
+    assert load_repos(p)[0]["sha"] == _sha1
+    (tmp_path / "origin" / "mimod2").mkdir()
+    (tmp_path / "origin" / "mimod2" / "__manifest__.py").write_text(
+        "{'name': 'y'}", encoding="utf-8")
+    _sp.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "add", "."],
+            cwd=str(tmp_path / "origin"), check=True)
+    _sp.run(["git", "-c", "user.email=t@t", "-c", "user.name=t", "commit", "-qm",
+             "dos"], cwd=str(tmp_path / "origin"), check=True)
+    sha2 = _sp.run(["git", "rev-parse", "HEAD"], cwd=str(tmp_path / "origin"),
+                   capture_output=True, text=True, check=True).stdout.strip()
+    assert sha2 != _sha1
+    run_pull(SimpleNamespace(proyecto=str(p), repo=None))
+    assert load_repos(p)[0]["sha"] == sha2
+
+
+def test_bundle_export_incluye_sha(tmp_path):
+    import json as _json
+    from omc.addonsops import bundle_desde_estado
+    url, sha = _repo_local(tmp_path)
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / ".env").write_text("ODOO_VERSION=18\n", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text(_json.dumps([
+        {"org": "oca", "repo": "server-tools", "url": url, "branch": "18.0",
+         "path": "addons/oca/server-tools", "modules": ["auditlog"],
+         "sha": sha},
+    ]), encoding="utf-8")
+    data = bundle_desde_estado(p)
+    assert data["modulos"][0]["sha"] == sha
 
 
 def test_add_modules_sin_url_ni_catalogo_no_clona(tmp_path):
@@ -92,6 +170,8 @@ def test_add_modules_actualiza_bundle(tmp_path):
     ok, fail = add_modules(proj, "custom", "r", str(rem), "17.0", ["mi_mod"])
     assert ok == ["mi_mod"] and fail == []
     data = _json.loads((proj / "addons-bundle.json").read_text(encoding="utf-8"))
+    assert len(data["modulos"]) == 1
+    assert data["modulos"][0]["sha"] and len(data["modulos"][0].pop("sha")) == 40
     assert data["modulos"] == [{"org": "custom", "repo": "r",
                                 "modules": ["mi_mod"], "url": str(rem)}]
 
