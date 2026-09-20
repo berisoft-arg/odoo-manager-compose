@@ -428,6 +428,61 @@ Reglas duras (fallan limpio, sin escribir a medias):
 - El sitio odoo se levanta **antes** del reload: nginx no carga upstreams que no
   resuelven, y un reload fallido dejaría caídos a todos los sites.
 
+### 7.2ter Tutorial: dos subdominios con HTTPS en un host
+
+Ejemplo: `tienda.com` + `app.tienda.com` en el mismo VPS, cada uno un proyecto
+prod. Bloques copiables por paso.
+
+Paso 0 — DNS primero (sin esto nada anda): registros A de `tienda.com`,
+`www.tienda.com`, `app.tienda.com` y `www.app.tienda.com` apuntando a la IP
+del VPS, con puertos 80/443 alcanzables. Verificar antes de seguir:
+
+```bash
+dig +short tienda.com; dig +short app.tienda.com
+```
+
+Paso 1 — proxy central (una sola vez por host):
+
+```bash
+omc proxy init   # red omc-proxy + nginx en 80/443 (esperado: "nginx escuchando")
+```
+
+Paso 2 — proyectos: dos prod ya creados (`/opt/tienda`, `/opt/app`) o crearlos
+con la opción 1 del menú.
+
+Paso 3 — primer site con staging (para no quemar límites de Let's Encrypt
+probando):
+
+```bash
+omc web --proxy --proyecto /opt/tienda --dominio tienda.com --email yo@x.com --staging
+```
+
+Paso 4 — repetir en real (o ir directo en real si el DNS ya estaba):
+
+```bash
+omc web --proxy --proyecto /opt/tienda --dominio tienda.com --email yo@x.com
+```
+
+Paso 5 — segundo subdominio (el proxy ya existe: solo suma el site):
+
+```bash
+omc web --proxy --proyecto /opt/app --dominio app.tienda.com --email yo@x.com
+```
+
+Paso 6 — verificar:
+
+```bash
+curl -sI https://tienda.com | head -1        # esperado: HTTP/2 200 (o 303 de Odoo)
+curl -sI https://app.tienda.com | head -1
+omc list   # ambos proyectos con su DOMINIO
+```
+
+Paso 7 — mantenimiento: renew centralizado (ver cron en §7.2bis). **Baja de
+un site**: `rm /opt/proxy/conf.d/<dominio>.conf` + `docker compose exec nginx
+nginx -s reload` en `/opt/proxy` (el cert expira solo, nada más que hacer).
+
+Si algo falla (DNS, 80 ocupado, cert fallido que deja día-1 HTTP): ver §12.
+
 ### 7.3 Configurar rclone después (Google Drive)
 
 Es la **opción 5 del menú**. Avanzado sin menú:
