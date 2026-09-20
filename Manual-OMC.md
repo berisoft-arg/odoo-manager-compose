@@ -6,7 +6,7 @@
 > `omc` (paquete `pip install odoo-manager-compose`) — Odoo Manager Compose: crea, opera y migra
 > instancias Odoo con docker-compose. Versiones Odoo 17 / 18 / 19, entornos desarrollo / producción.
 >
-> **Uso diario: solo `omc`, sin argumentos.** Se abre el menú (opciones 1-10, `0` para salir)
+> **Uso diario: solo `omc`, sin argumentos.** Se abre el menú (opciones 1-11, `0` para salir)
 > y todo se elige ahí: crear, descargar módulos, localizar, nginx, rclone, monitor, GitHub,
 > backup, restore, migrar. Al terminar cada acción vuelve al menú.
 > Los subcomandos directos (`omc crear --flags`, `omc addons ...`, etc.) existen como
@@ -116,6 +116,7 @@ omc     # sin flags abre el menú:
 #   8) Backup manual [prod]
 #   9) Restaurar BD [prod] (guiado: local/Drive, doble confirmación)
 #  10) Migrar proyecto a nueva versión Odoo (OCA: chequeo módulos + openupgrade)
+#  11) Proxy multinstancia (nginx compartido por subdominio)
 #   0) Salir
 # Opción 1 pide: 1) Nombre  2) Entorno  3) Versión  4) Puertos (validados)
 # 5) Passwords  6) ¿Desplegar? Al terminar vuelve al menú: los módulos NO se
@@ -392,6 +393,40 @@ Compresión gzip en `nginx/gzip.conf` (se monta en `conf.d`, contexto http:
 nivel 6, buffers 16 8k, tipos texto/json/js/xml/imágenes).
 
 Sin dominio no hay certbot: queda prod directo (el asistente lo normaliza con aviso).
+
+### 7.2bis Proxy multinstancia (nginx compartido por subdominio)
+
+Un solo publicador 80/443 por host para N proyectos prod con dominio. Es la
+**opción 11 del menú**. Avanzado sin menú:
+
+```bash
+omc proxy init                                   # crea /opt/proxy + red omc-proxy + levanta nginx
+omc web --proxy --proyecto /opt/tienda --dominio tienda.com --email yo@x.com [--staging]
+omc web --standalone --proyecto /opt/tienda --dominio ...   # nginx propio (un solo HTTPS por host)
+# o interactivo: omc web --proyecto .   (pregunta modo; default proxy si está
+# inicializado, si no standalone)
+```
+
+Cómo funciona: `omc proxy init` (idempotente) genera el proyecto `proxy`
+(`ENTORNO=infraestructura`, visible en `list`/`doctor`/monitor), crea la red
+externa `omc-proxy` y levanta nginx. `omc web --proxy` conecta el sitio:
+`container_name <proyecto>-odoo` (DNS estable entre composes) + red `omc-proxy`
++ `ports` → `expose` + `proxy_mode`, escribe el site día-1 en
+`proxy/conf.d/<dominio>.conf`, valida con `nginx -t`, recarga, corre certonly
+**central** (apex + www) y deja el site HTTPS. Si el cert ya existe y no es
+staging, lo conserva sin re-emitir. Renovar todo (cron mensual en host):
+
+```bash
+cd /opt/proxy && docker compose run --rm certbot renew && docker compose exec nginx nginx -s reload
+```
+
+Reglas duras (fallan limpio, sin escribir a medias):
+
+- Sin proxy inicializado: `omc proxy init` primero.
+- Proyecto con nginx local: quitarlo o usar `--standalone` (un solo 80/443 por host).
+- 80/443 ocupados (traefik u otro nginx): el proxy no levanta; liberar o no usar proxy.
+- El sitio odoo se levanta **antes** del reload: nginx no carga upstreams que no
+  resuelven, y un reload fallido dejaría caídos a todos los sites.
 
 ### 7.3 Configurar rclone después (Google Drive)
 
@@ -738,7 +773,7 @@ cd /opt/odoo-manager-compose && ./deploy-vps.sh
 
 Raíces custom: `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh` (datos y proyectos).
 
-Paso 3 — verificar (OMC sin subcomando abre el menú 1-10):
+Paso 3 — verificar (OMC sin subcomando abre el menú 1-11):
 
 ```bash
 omc --version && omc list

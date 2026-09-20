@@ -752,6 +752,7 @@ def _activar_https(salida: Path, dominio: str, email: str, staging: bool) -> boo
         render(cargar_template("nginx-https.conf.tpl"), {
             "PROYECTO": salida.name,
             "DOMINIO": dominio,
+            "ODOO_HOST": "odoo",
         }), encoding="utf-8")
     r = subprocess.run(["docker", "compose", "exec", "nginx", "nginx", "-s", "reload"],
                        cwd=str(salida))
@@ -761,6 +762,138 @@ def _activar_https(salida: Path, dominio: str, email: str, staging: bool) -> boo
         return False
     print(f"  ✓ HTTPS activo: https://{dominio} (www redirige al apex).")
     return True
+
+
+def _elegir_modo_web(args, salida: Path) -> bool:
+    """True = proxy central, False = nginx propio. Nunca ambiguo.
+
+    Flags mandan; si no, en no-interactivo decide si hay proxy inicializado
+    (sin proxy, clásico para no cambiar nada); en interactivo se pregunta.
+    """
+    if getattr(args, "standalone", False):
+        return False
+    if getattr(args, "proxy", False):
+        return True
+    from .compose import PROXY_PROJECT
+    from .core import projects_home
+    hay_proxy = (projects_home() / PROXY_PROJECT / "docker-compose.yml").exists()
+    if getattr(args, "no_input", False) or not es_interactivo():
+        return hay_proxy
+    modo = ask_opcion(
+        "¿Proxy central (multi-subdominio) o nginx propio del proyecto?",
+        ["Proxy central (recomendado si hay más de un proyecto)",
+         "Nginx propio (standalone, un solo HTTPS por host)"],
+        "Proxy central (recomendado si hay más de un proyecto)" if hay_proxy
+        else "Nginx propio (standalone, un solo HTTPS por host)")
+    return modo.startswith("Proxy")
+
+
+def _activar_https_proxy(salida: Path, proxy_root: Path, dominio: str,
+                         email: str, staging: bool) -> bool:
+    """Cert central + site HTTPS en el proxy. Requiere sitio odoo levantado.
+
+    Si ya hay cert válido y no es staging, lo conserva (no re-emite).
+    Devuelve True si quedó activo (día 1 intacto si certbot falla).
+    """
+    salida = Path(salida).resolve()
+    proxy_root = Path(proxy_root).resolve()
+    odoo_host = f"{salida.name.lower()}-odoo"
+    print("\n== Activando HTTPS en el proxy ==")
+    live = proxy_root / "letsencrypt" / "live" / dominio / "fullchain.pem"
+    if live.exists() and not staging:
+        print(f"  Cert válido existente para {dominio}: se conserva (sin re-emitir).")
+    else:
+        print(f"  Obteniendo certificado para {dominio} + www.{dominio} ...")
+        r = subprocess.run(_certonly_cmd(email, dominio, staging), cwd=str(proxy_root))
+        if r.returncode != 0:
+            print("  ⚠ certbot falló (¿DNS apunta al VPS? ¿puerto 80 abierto?).")
+            print("  Queda el HTTP del día 1; reintenta cuando el DNS resuelva.")
+            return False
+    sitio = proxy_root / "conf.d" / f"{dominio}.conf"
+    sitio.write_text(render(cargar_template("nginx-https.conf.tpl"), {
+        "PROYECTO": salida.name,
+        "DOMINIO": dominio,
+        "ODOO_HOST": odoo_host,
+    }), encoding="utf-8")
+    r = subprocess.run(["docker", "compose", "exec", "nginx", "nginx", "-t"],
+                       cwd=str(proxy_root))
+    if r.returncode != 0:
+        print("  ⚠ nginx -t falló en el proxy con el site nuevo (revisá el dominio).")
+        return False
+    r = subprocess.run(["docker", "compose", "exec", "nginx", "nginx", "-s", "reload"],
+                       cwd=str(proxy_root))
+    if r.returncode != 0:
+        print("  ⚠ No pude recargar el proxy; reinícialo a mano:")
+        print(f"  cd {proxy_root} && docker compose restart nginx")
+        return False
+    print(f"  ✓ HTTPS activo: https://{dominio} (www redirige al apex).")
+    print(f"  Renovar todo (cron en host): cd {proxy_root} && "
+          "docker compose run --rm certbot renew && "
+          "docker compose exec nginx nginx -s reload")
+    return True
+
+
+def modo_configurar_web_proxy(args, salida, dominio: str, email: str, staging: bool) -> None:
+    """Web vía proxy central: parchea sitio, site día 1, cert central, HTTPS.
+
+    Falla limpio (sys.exit) sin dejar nada a medias: primero lo reversible.
+    """
+    from .compose import PROXY_PROJECT, asegurar_proxy_mode, parchear_compose_a_proxy
+    from .core import projects_home
+
+    salida = Path(salida).resolve()
+    proxy_root = (projects_home() / PROXY_PROJECT).resolve()
+    if not (proxy_root / "docker-compose.yml").exists():
+        sys.exit(f"No hay proxy central en {proxy_root} (corre `omc proxy init` primero).")
+    odoo_host = f"{salida.name.lower()}-odoo"
+    # 1) proxy arriba (si 80/443 los tiene otro, falla acá con mensaje claro)
+    r = subprocess.run(["docker", "compose", "up", "-d"], cwd=str(proxy_root))
+    if r.returncode != 0:
+        sys.exit("No pude levantar el proxy (¿puerto 80/443 ocupado por traefik u otro "
+                 "nginx?). Revisá con: docker ps --format '{{.Names}} {{.Ports}}'")
+    # 2) parchear sitio (falla limpio si tiene nginx local) + proxy_mode
+    cambios = parchear_compose_a_proxy(salida, salida.name)["cambios"]
+    if cambios:
+        print(f"  ✓ compose del sitio: {', '.join(cambios)}.")
+    if asegurar_proxy_mode(salida):
+        print("  ✓ proxy_mode = True en odoo.conf.")
+    # 3) sitio odoo arriba (el proxy debe resolver el upstream al recargar)
+    r = subprocess.run(["docker", "compose", "up", "-d"], cwd=str(salida))
+    if r.returncode != 0:
+        sys.exit(f"No pude levantar {salida} (revisá su compose).")
+    # 4) site día 1 + gzip si falta + reload validado
+    confd = proxy_root / "conf.d"
+    confd.mkdir(exist_ok=True)
+    if not (confd / "gzip.conf").exists():
+        (confd / "gzip.conf").write_text(
+            render(cargar_template("nginx-gzip.conf.tpl"), {"PROYECTO": PROXY_PROJECT}),
+            encoding="utf-8")
+    sitio = confd / f"{dominio}.conf"
+    sitio.write_text(render(cargar_template("nginx.conf.tpl"), {
+        "PROYECTO": salida.name, "DOMINIO": dominio, "ODOO_HOST": odoo_host,
+    }), encoding="utf-8")
+    print(f"  ✓ site día 1 en proxy: conf.d/{dominio}.conf.")
+    r = subprocess.run(["docker", "compose", "exec", "nginx", "nginx", "-t"],
+                       cwd=str(proxy_root))
+    if r.returncode != 0:
+        sys.exit("nginx -t falló en el proxy con el site nuevo (revisá el dominio).")
+    r = subprocess.run(["docker", "compose", "exec", "nginx", "nginx", "-s", "reload"],
+                       cwd=str(proxy_root))
+    if r.returncode != 0:
+        sys.exit(f"nginx -t ok pero reload falló; recargá a mano: cd {proxy_root} "
+                 "&& docker compose restart nginx")
+    # 5) cert central + HTTPS
+    if _activar_https_proxy(salida, proxy_root, dominio, email, staging):
+        print(f"=== Web por proxy para https://{dominio} (staging={staging}) ===")
+    # 6) persistir en .env del sitio
+    envf = salida / ".env"
+    env_txt = envf.read_text(encoding="utf-8") if envf.exists() else ""
+    for k, v in (("DOMINIO", dominio), ("CERTBOT_EMAIL", email)):
+        import re as _re
+        env_txt = (_re.sub(rf"^{k}=.*$", f"{k}={v}", env_txt, flags=_re.M)
+                   if f"\n{k}=" in "\n" + env_txt
+                   else env_txt.rstrip("\n") + f"\n{k}={v}\n")
+    envf.write_text(env_txt, encoding="utf-8")
 
 
 def modo_configurar_web(args):
@@ -789,10 +922,14 @@ def modo_configurar_web(args):
             staging = True
     if not dominio or not email:
         sys.exit("Faltan --dominio y/o --email (o corre interactivo).")
+    if _elegir_modo_web(args, salida):
+        modo_configurar_web_proxy(args, salida, dominio, email, staging)
+        return
     mapping = {
         "PROYECTO": salida.name,
         "ODOO_VERSION": env["ODOO_VERSION"],
         "DOMINIO": dominio,
+        "ODOO_HOST": "odoo",
         "CERTBOT_EMAIL": email,
         "CERTBOT_STAGING": " --staging" if staging else "",
     }
@@ -831,14 +968,9 @@ def modo_configurar_web(args):
         f.write_text(txt, encoding="utf-8")
         print("  (nginx ya existía en el compose; conf actualizada: sitio odoo.conf + gzip)")
     # proxy_mode en odoo.conf (imprescindible detrás de nginx)
-    conf = salida / "config" / "odoo.conf"
-    if conf.exists():
-        ctxt = conf.read_text(encoding="utf-8")
-        if "proxy_mode" not in ctxt:
-            conf.write_text(
-                ctxt.rstrip("\n") + "\nproxy_mode = True\n", encoding="utf-8"
-            )
-            print("  ✓ proxy_mode = True en odoo.conf.")
+    from .compose import asegurar_proxy_mode
+    if asegurar_proxy_mode(salida):
+        print("  ✓ proxy_mode = True en odoo.conf.")
     # persistir en .env
     env_txt = (salida / ".env").read_text(encoding="utf-8")
     for k, v in (("DOMINIO", dominio), ("CERTBOT_EMAIL", email)):
@@ -2064,6 +2196,7 @@ def menu_principal() -> str:
         ("backup", "Backup manual [prod]"),
         ("restore", "Restaurar BD [prod]"),
         ("migrar", "Migrar proyecto a nueva versión Odoo (OCA)"),
+        ("proxy", "Proxy multinstancia (nginx compartido por subdominio)"),
         ("salir", "Salir"),
     ]
     print("=== Odoo Manager Compose ===")
@@ -2078,6 +2211,50 @@ def menu_principal() -> str:
     if r.isdigit() and 1 <= int(r) <= len(labels):
         return acciones[int(r) - 1][0]
     return next((k for k, v in acciones if v == r), "crear")
+
+
+def run_proxy_init(salida=None) -> Path:
+    """Crea/actualiza el proxy central (/opt/proxy): compose + red + up. Idempotente.
+
+    No pide nada: seguro en menú y en no-interactivo. Devuelve la ruta.
+    """
+    from .compose import PROXY_NETWORK, PROXY_PROJECT, generar_proxy_compose
+
+    root = Path(salida).resolve() if salida else (projects_home() / PROXY_PROJECT).resolve()
+    asegurar_escribible(root, "proxy")
+    for d in ("conf.d", "letsencrypt", "certbot-www"):
+        (root / d).mkdir(parents=True, exist_ok=True)
+    (root / "docker-compose.yml").write_text(generar_proxy_compose(), encoding="utf-8")
+    (root / "conf.d" / "gzip.conf").write_text(
+        render(cargar_template("nginx-gzip.conf.tpl"), {"PROYECTO": PROXY_PROJECT}),
+        encoding="utf-8")
+    (root / ".gitignore").write_text(cargar_template("gitignore.tpl"), encoding="utf-8")
+    envf = root / ".env"
+    if not envf.exists():
+        envf.write_text(f"PROYECTO={PROXY_PROJECT}\nENTORNO=infraestructura\n",
+                        encoding="utf-8")
+    print(f"\nProxy central en: {root}")
+    r = subprocess.run(["docker", "network", "inspect", PROXY_NETWORK],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    if r.returncode != 0:
+        print(f"  Creando red {PROXY_NETWORK} ...")
+        r = subprocess.run(["docker", "network", "create", PROXY_NETWORK])
+        if r.returncode != 0:
+            sys.exit(f"No pude crear la red {PROXY_NETWORK} (¿docker accesible?).")
+    else:
+        print(f"  Red {PROXY_NETWORK} ya existe.")
+    r = subprocess.run(["docker", "compose", "up", "-d"], cwd=str(root))
+    if r.returncode != 0:
+        sys.exit(f"No pude levantar el proxy en {root} (revisá docker).")
+    print("  ✓ nginx escuchando 80/443 (conf.d/ vacío hasta conectar sitios).")
+    print("  Siguiente: omc web --proxy --proyecto <ruta> --dominio <dom> --email <mail>")
+    return root
+
+
+def run_proxy(args=None):
+    """Menú 11 / `omc proxy`: inicializa el proxy central (idempotente)."""
+    salida = getattr(args, "salida", None) if args is not None else None
+    run_proxy_init(salida)
 
 
 def run_list(args):
@@ -2196,6 +2373,8 @@ def run_web(args):
         dominio=getattr(args, "dominio", None),
         email=getattr(args, "email", None),
         staging=bool(getattr(args, "staging", False)),
+        proxy=bool(getattr(args, "proxy", False)),
+        standalone=bool(getattr(args, "standalone", False)),
         no_input=bool(getattr(args, "no_input", False)),
     ))
 
@@ -2604,6 +2783,7 @@ def crear_proyecto(args):
         "PIP_BREAK": "" if version == "17" else " --break-system-packages",
         "NGINX": nginx,
         "DOMINIO": dominio,
+        "ODOO_HOST": "odoo",
         "CERTBOT_EMAIL": email,
         "CERTBOT_STAGING": " --staging" if staging else "",
         "RCLONE_REMOTE": rclone_remote,

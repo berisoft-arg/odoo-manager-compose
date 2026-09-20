@@ -74,6 +74,11 @@ def build_parser():
     w.add_argument("--dominio", default=None)
     w.add_argument("--email", default=None)
     w.add_argument("--staging", action="store_true")
+    g = w.add_mutually_exclusive_group()
+    g.add_argument("--proxy", action="store_true",
+                   help="Proxy central multinstancia (default si está inicializado)")
+    g.add_argument("--standalone", action="store_true",
+                   help="Nginx propio del proyecto (un solo HTTPS por host)")
 
     r = sub.add_parser("rclone", help="Configurar rclone/Drive")
     r.add_argument("--proyecto", default=None)
@@ -97,6 +102,11 @@ def build_parser():
     m.add_argument("--sin-bd", action="store_true", help="Saltar script de BD")
     m.add_argument("--yes", action="store_true", help="No preguntar (migra código sin confirmar)")
 
+    px = sub.add_parser("proxy", help="Proxy multinstancia (nginx compartido)")
+    px.add_argument("accion", nargs="?", default="init", choices=["init"],
+                    help="Acción (default: init)")
+    px.add_argument("--salida", default=None, help="Carpeta del proxy (default: <proyectos>/proxy)")
+
     return p
 
 
@@ -117,10 +127,11 @@ def _ejecutar_accion_menu(accion):
             rclone_remote=None, vcpus=None, ram_gb=None, proyecto=None
         ))
         return
-    # resto de acciones: monitor/github no necesitan proyecto
-    if accion in ("monitor", "github"):
-        from .flows import run_monitor, run_github
-        {"monitor": run_monitor, "github": run_github}[accion](SimpleNamespace(proyecto=None))
+    # resto de acciones: monitor/github/proxy no necesitan proyecto
+    if accion in ("monitor", "github", "proxy"):
+        from .flows import run_monitor, run_github, run_proxy
+        {"monitor": run_monitor, "github": run_github,
+         "proxy": run_proxy}[accion](SimpleNamespace(proyecto=None))
         return
     # resto de acciones necesitan proyecto (se elige uno)
     # reutilizar lógica de flows.elegir_proyecto si existe
@@ -228,6 +239,9 @@ def main(argv=None):
     elif args.cmd == "migrar":
         from .migrate import flujo_migracion
         flujo_migracion(args.proyecto, args)
+    elif args.cmd == "proxy":
+        from .flows import run_proxy_init
+        run_proxy_init(getattr(args, "salida", None))
     elif args.cmd in ("web", "rclone", "monitor", "github", "backup", "restore"):
         from .flows import run_web, run_rclone, run_monitor, run_github, run_backup, run_restore
         {"web": run_web, "rclone": run_rclone, "monitor": run_monitor,

@@ -26,7 +26,9 @@ Asistente interactivo + CLI + monitor web + migración OCA entre versiones.
 - **Backup/restore**: dump PostgreSQL + filestore, local o Drive (+ copia dominical),
   con doble confirmación al restaurar.
 - **Multi-instancia**: puertos validados y sugeridos libres, `ODOO_GEVENT_PORT`,
-  `omc list` / `omc doctor [--fix]`.
+  `omc list` / `omc doctor [--fix]`. Con dominio en un solo host: **proxy
+  nginx compartido** (`omc proxy init` + `omc web --proxy`), un site por
+  subdominio con TLS centralizado.
 
 ## Requisitos
 
@@ -57,7 +59,7 @@ cd /opt/odoo-manager-compose && ./deploy-vps.sh
 
 Raíces custom: `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh` (datos y proyectos).
 
-Paso 3 — verificar (OMC sin subcomando abre el menú 1-10):
+Paso 3 — verificar (OMC sin subcomando abre el menú 1-11):
 
 ```bash
 omc --version && omc list
@@ -66,14 +68,15 @@ omc --version && omc list
 
 Detalles, venv manual y otras vías: ver [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker).
 
-## Uso rápido: el menú básico (1-10, 0 sale)
+## Uso rápido: el menú básico (1-11, 0 sale)
 
 ```bash
 omc                 # abre el menú
 ```
 
 1 crear proyecto · 2 descargar módulos · 3 localizar AR · 4 web nginx+TLS ·
-5 rclone/Drive · 6 monitor · 7 GitHub · 8 backup · 9 restore · 10 migrar OCA.
+5 rclone/Drive · 6 monitor · 7 GitHub · 8 backup · 9 restore · 10 migrar OCA ·
+11 proxy multinstancia (nginx compartido por subdominio).
 Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup.
 
 Menú avanzado (subcomandos directos como `omc crear --flags`,

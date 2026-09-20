@@ -7,11 +7,13 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 from omc.flows import (
     _activar_https,
     _certonly_cmd,
+    _elegir_modo_web,
     aplicar_localizacion,
     bloques_localizacion,
     ensure_dockerfile_sync,
     es_prod,
     exigir_prod,
+    modo_configurar_web,
     run_backup,
     run_deps,
     run_restore,
@@ -106,6 +108,378 @@ def test_menu_principal_muestra_tip_monitor(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda *a, **k: "0")
     assert menu_principal() == "salir"
     assert "opción 6" in capsys.readouterr().out
+
+
+def test_menu_opcion_11_es_proxy(monkeypatch, capsys):
+    from omc.flows import menu_principal
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "11")
+    assert menu_principal() == "proxy"
+    out = capsys.readouterr().out
+    assert " 11)" in out and "Proxy multinstancia" in out
+
+
+def test_run_proxy_init_crea_proyecto(monkeypatch, tmp_path, capsys):
+    from omc.core import sin_renderizar
+    from omc.flows import run_proxy_init
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    class _R:
+        def __init__(self, rc=0):
+            self.returncode = rc
+    llamadas = []
+    def _fake(cmd, **k):
+        llamadas.append(cmd)
+        if cmd[:3] == ["docker", "network", "inspect"]:
+            return _R(1)  # red no existe -> crear
+        return _R(0)
+    monkeypatch.setattr("omc.flows.subprocess.run", _fake)
+    root = run_proxy_init()
+    assert root == (tmp_path / "proxy").resolve()
+    comp = (root / "docker-compose.yml").read_text(encoding="utf-8")
+    assert '"80:80"' in comp and '"443:443"' in comp
+    assert "omc-proxy:\n    external: true" in comp
+    assert "./conf.d:/etc/nginx/conf.d/:ro" in comp
+    assert sin_renderizar(comp) == []
+    env = (root / ".env").read_text(encoding="utf-8")
+    assert "PROYECTO=proxy" in env and "ENTORNO=infraestructura" in env
+    assert (root / "conf.d").is_dir() and (root / "letsencrypt").is_dir()
+    assert (root / "certbot-www").is_dir()
+    assert (root / "conf.d" / "gzip.conf").exists()
+    assert "letsencrypt/" in (root / ".gitignore").read_text(encoding="utf-8")
+    assert any(c[:3] == ["docker", "network", "create"] for c in llamadas)
+    assert ["docker", "compose", "up", "-d"] in llamadas
+    out = capsys.readouterr().out
+    assert "Proxy central en:" in out
+
+
+def test_run_proxy_init_idempotente(monkeypatch, tmp_path, capsys):
+    from omc.flows import run_proxy_init
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    class _R:
+        def __init__(self, rc=0):
+            self.returncode = rc
+    llamadas = []
+    def _fake(cmd, **k):
+        llamadas.append(cmd)
+        if cmd[:3] == ["docker", "network", "inspect"]:
+            return _R(0)  # red ya existe -> no crear
+        return _R(0)
+    monkeypatch.setattr("omc.flows.subprocess.run", _fake)
+    run_proxy_init()
+    run_proxy_init()  # segunda corrida no falla ni duplica
+    assert not any(c[:3] == ["docker", "network", "create"] for c in llamadas)
+    assert llamadas.count(["docker", "compose", "up", "-d"]) == 2
+    capsys.readouterr()
+
+
+def test_run_proxy_delega_init(monkeypatch, tmp_path):
+    import omc.flows as F
+    from omc.flows import run_proxy
+    vistos = []
+    monkeypatch.setattr(F, "run_proxy_init", lambda salida=None: vistos.append(salida))
+    run_proxy()
+    run_proxy(SimpleNamespace(salida="/x/proxy"))
+    assert vistos == [None, "/x/proxy"]
+
+
+def test_dispatch_proxy_no_pide_proyecto(monkeypatch, capsys, tmp_path):
+    from omc.cli import _ejecutar_accion_menu
+    import omc.flows as F
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+
+    def _boom(*a, **k):
+        raise AssertionError("no debe pedir input")
+
+    monkeypatch.setattr("builtins.input", _boom)
+    monkeypatch.setattr(F, "run_proxy_init", lambda salida=None: print("init-ok"))
+    _ejecutar_accion_menu("proxy")  # sin elegir proyecto, sin colgarse
+    assert "init-ok" in capsys.readouterr().out
+
+
+def test_cli_proxy_init_parser():
+    from omc.cli import build_parser
+    args = build_parser().parse_args(["proxy"])
+    assert args.cmd == "proxy" and args.accion == "init" and args.salida is None
+    args = build_parser().parse_args(["proxy", "init", "--salida", "/x"])
+    assert args.accion == "init" and args.salida == "/x"
+
+
+def test_cli_web_proxy_flags():
+    import pytest
+    from omc.cli import build_parser
+    args = build_parser().parse_args(["web", "--proxy", "--proyecto", "X"])
+    assert args.proxy is True and args.standalone is False
+    args = build_parser().parse_args(["web", "--standalone"])
+    assert args.standalone is True and args.proxy is False
+    args = build_parser().parse_args(["web"])
+    assert args.proxy is False and args.standalone is False
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["web", "--proxy", "--standalone"])
+
+
+def _proj_web_prod(tmp_path):
+    p = tmp_path / "tienda"
+    p.mkdir()
+    (p / "docker-compose.yml").write_text(
+        "services:\n"
+        "  db:\n"
+        "    image: postgres:16\n"
+        "  odoo:\n"
+        "    image: odoo:18\n"
+        "    restart: always\n"
+        '    ports:\n      - "8070:8069"\n'
+        "    environment:\n"
+        "      - HOST=db\n"
+        "volumes:\n"
+        "  odoo-db-data:\n",
+        encoding="utf-8")
+    (p / ".env").write_text(
+        "ENTORNO=produccion\nODOO_VERSION=18\nODOO_IMAGE=odoo:18\nODOO_PORT=8070\n",
+        encoding="utf-8")
+    (p / "config").mkdir()
+    (p / "config" / "odoo.conf").write_text("[options]\n", encoding="utf-8")
+    return p
+
+
+def _proxy_vacio(tmp_path):
+    from pathlib import Path as _P
+    root = _P(tmp_path) / "proxy"
+    (root / "conf.d").mkdir(parents=True)
+    (root / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    return root
+
+
+class _RC:
+    def __init__(self, rc=0):
+        self.returncode = rc
+
+
+def _ns_web(proyecto, **kw):
+    base = dict(proyecto=str(proyecto), dominio="tienda.com", email="yo@x.com",
+                staging=False, proxy=False, standalone=False, no_input=True)
+    base.update(kw)
+    return SimpleNamespace(**base)
+
+
+def test_elegir_modo_web_defaults(monkeypatch, tmp_path):
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    ns = SimpleNamespace(proxy=False, standalone=False, no_input=True)
+    assert _elegir_modo_web(ns, tmp_path) is False  # sin proxy: clásico
+    _proxy_vacio(tmp_path)
+    assert _elegir_modo_web(ns, tmp_path) is True  # con proxy: central
+    assert _elegir_modo_web(SimpleNamespace(proxy=True, standalone=False,
+                                            no_input=True), tmp_path) is True
+    assert _elegir_modo_web(SimpleNamespace(proxy=False, standalone=True,
+                                            no_input=True), tmp_path) is False
+
+
+def test_elegir_modo_web_pregunta(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    _proxy_vacio(tmp_path)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "")  # default
+    ns = SimpleNamespace(proxy=False, standalone=False, no_input=False)
+    assert _elegir_modo_web(ns, tmp_path) is True  # default = proxy (hay proxy)
+    capsys.readouterr()
+    (tmp_path / "proxy" / "docker-compose.yml").unlink()
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "")
+    assert _elegir_modo_web(ns, tmp_path) is False  # default = standalone
+    capsys.readouterr()
+
+
+def test_web_proxy_completo(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    p = _proj_web_prod(tmp_path)
+    proxy = _proxy_vacio(tmp_path)
+    llamadas = []
+
+    def _fake(cmd, **k):
+        llamadas.append((list(cmd), k.get("cwd", "")))
+        return _RC(0)
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _fake)
+    modo_configurar_web(_ns_web(p, proxy=True))
+    out = capsys.readouterr().out
+    # site en el proxy con upstream propio
+    sitio = proxy / "conf.d" / "tienda.com.conf"
+    txt = sitio.read_text(encoding="utf-8")
+    assert "server_name tienda.com www.tienda.com;" in txt
+    assert "proxy_pass http://tienda-odoo:8069/;" in txt
+    assert "{{" not in txt
+    # compose del sitio parcheado
+    comp = (p / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "container_name: tienda-odoo" in comp
+    assert "omc-proxy:\n    external: true" in comp
+    assert '"8070:8069"' not in comp
+    assert "proxy_mode = True" in (p / "config" / "odoo.conf").read_text(
+        encoding="utf-8")
+    # .env persistido
+    env = (p / ".env").read_text(encoding="utf-8")
+    assert "DOMINIO=tienda.com" in env and "CERTBOT_EMAIL=yo@x.com" in env
+    # certonly central: comando exacto con cwd=proxy
+    certs = [c for c, _ in llamadas if "certbot" in c]
+    assert len(certs) == 1
+    assert certs[0][:9] == ["docker", "compose", "run", "--rm", "certbot",
+                            "certonly", "--webroot", "-w", "/var/www/certbot"]
+    assert "-d" in certs[0] and "tienda.com" in certs[0] and "www.tienda.com" in certs[0]
+    assert "--staging" not in certs[0]
+    assert [cwd for c, cwd in llamadas if "certbot" in c] == [str(proxy)]
+    # nginx -t antes del reload
+    idx_t = next(i for i, (c, _) in enumerate(llamadas) if c[-2:] == ["nginx", "-t"])
+    idx_r = next(i for i, (c, _) in enumerate(llamadas)
+                 if c[-3:] == ["nginx", "-s", "reload"])
+    assert idx_t < idx_r
+    assert "cron en host" in out and "https://tienda.com" in out
+
+
+def test_web_proxy_sin_init_falla_limpio(monkeypatch, tmp_path, capsys):
+    import pytest
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    p = _proj_web_prod(tmp_path)
+    antes = (p / "docker-compose.yml").read_text(encoding="utf-8")
+
+    def _boom(*a, **k):
+        raise AssertionError("sin proxy no debe llamar a docker")
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _boom)
+    with pytest.raises(SystemExit) as e:
+        modo_configurar_web(_ns_web(p, proxy=True))
+    assert "omc proxy init" in str(e.value.code)
+    assert (p / "docker-compose.yml").read_text(encoding="utf-8") == antes
+    assert not (tmp_path / "proxy").exists()
+    capsys.readouterr()
+
+
+def test_web_proxy_rechaza_nginx_local(monkeypatch, tmp_path, capsys):
+    import pytest
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    p = _proj_web_prod(tmp_path)
+    with open(p / "docker-compose.yml", "a", encoding="utf-8") as f:
+        f.write("\n  nginx:\n    image: nginx:alpine\n")
+    antes = (p / "docker-compose.yml").read_text(encoding="utf-8")
+    _proxy_vacio(tmp_path)
+    llamadas = []
+
+    def _fake(cmd, **k):
+        llamadas.append(list(cmd))
+        return _RC(0)
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _fake)
+    with pytest.raises(SystemExit) as e:
+        modo_configurar_web(_ns_web(p, proxy=True))
+    assert "80/443" in str(e.value.code)
+    assert (p / "docker-compose.yml").read_text(encoding="utf-8") == antes
+    assert not any("certbot" in c for c in llamadas)
+    capsys.readouterr()
+
+
+def test_web_proxy_puertos_ocupados(monkeypatch, tmp_path, capsys):
+    import pytest
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    p = _proj_web_prod(tmp_path)
+    antes = (p / "docker-compose.yml").read_text(encoding="utf-8")
+    _proxy_vacio(tmp_path)
+    llamadas = []
+
+    def _fake(cmd, **k):
+        llamadas.append(list(cmd))
+        if cmd == ["docker", "compose", "up", "-d"] and k.get("cwd", "").endswith("proxy"):
+            return _RC(1)  # 80/443 ocupados por otro
+        return _RC(0)
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _fake)
+    with pytest.raises(SystemExit) as e:
+        modo_configurar_web(_ns_web(p, proxy=True))
+    assert "traefik" in str(e.value.code)
+    assert (p / "docker-compose.yml").read_text(encoding="utf-8") == antes
+    assert not any("certbot" in c for c in llamadas)
+    capsys.readouterr()
+
+
+def test_web_proxy_cert_falla_conserva_dia1(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    p = _proj_web_prod(tmp_path)
+    proxy = _proxy_vacio(tmp_path)
+
+    def _fake(cmd, **k):
+        if "certbot" in cmd:
+            return _RC(1)
+        return _RC(0)
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _fake)
+    modo_configurar_web(_ns_web(p, proxy=True))
+    out = capsys.readouterr().out
+    sitio = proxy / "conf.d" / "tienda.com.conf"
+    assert "listen 443 ssl" not in sitio.read_text(encoding="utf-8")
+    assert "https://tienda.com" not in out
+    assert "cron en host" not in out
+
+
+def test_web_proxy_reusa_cert_existente(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    p = _proj_web_prod(tmp_path)
+    proxy = _proxy_vacio(tmp_path)
+    live = proxy / "letsencrypt" / "live" / "tienda.com"
+    live.mkdir(parents=True)
+    (live / "fullchain.pem").write_text("x", encoding="utf-8")
+    llamadas = []
+
+    def _fake(cmd, **k):
+        llamadas.append(list(cmd))
+        return _RC(0)
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _fake)
+    modo_configurar_web(_ns_web(p, proxy=True, staging=False))
+    out = capsys.readouterr().out
+    assert not any("certbot" in c for c in llamadas)  # no re-emite
+    assert "se conserva" in out
+    sitio = proxy / "conf.d" / "tienda.com.conf"
+    assert "listen 443 ssl" in sitio.read_text(encoding="utf-8")
+    assert "https://tienda.com" in out
+
+
+def test_web_standalone_intacto(monkeypatch, tmp_path, capsys):
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    p = _proj_web_prod(tmp_path)
+
+    def _boom(*a, **k):
+        raise AssertionError("standalone con no_input no llama a docker")
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _boom)
+    modo_configurar_web(_ns_web(p))
+    comp = (p / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "  nginx:" in comp and "expose:" in comp  # bloque local, como siempre
+    assert (p / "nginx" / "nginx.conf").exists()  # día 1 en el proyecto
+    assert "DOMINIO=tienda.com" in (p / ".env").read_text(encoding="utf-8")
+    assert not (tmp_path / "proxy").exists()
+    capsys.readouterr()
+
+
+def test_run_web_pasa_flags(monkeypatch, tmp_path):
+    import omc.flows as F
+    p = _proj_web_prod(tmp_path)
+    vistos = []
+    monkeypatch.setattr(F, "modo_configurar_web", lambda ns: vistos.append(ns))
+    from omc.flows import run_web
+    run_web(SimpleNamespace(proyecto=str(p), dominio="t.com", email="a@b.c",
+                            staging=True, proxy=True, standalone=False,
+                            no_input=True))
+    assert len(vistos) == 1
+    assert vistos[0].proxy is True and vistos[0].standalone is False
+    assert vistos[0].staging is True and vistos[0].no_input is True
+    assert vistos[0].dominio == "t.com"
 
 
 def test_resolver_proyecto_rechaza_sin_compose(tmp_path):
@@ -305,7 +679,7 @@ def test_parametros_ar_script(tmp_path):
 def test_nginx_https_estructura():
     from omc.core import render, template_text
     out = render(template_text("nginx-https.conf.tpl"),
-                 {"PROYECTO": "demo", "DOMINIO": "tienda.com"})
+                 {"PROYECTO": "demo", "DOMINIO": "tienda.com", "ODOO_HOST": "odoo"})
     assert out.count("server {") == 3
     assert "server_name tienda.com www.tienda.com" in out
     assert "return 301 https://tienda.com$request_uri;" in out
@@ -324,6 +698,110 @@ def test_nginx_https_estructura():
         assert directiva in out, directiva
     assert "include /etc/letsencrypt/options-ssl-nginx.conf" not in out  # certonly webroot no lo crea
     assert "{{" not in out
+
+
+def test_nginx_https_modo_proxy():
+    from omc.core import render, template_text, sin_renderizar
+    out = render(template_text("nginx-https.conf.tpl"),
+                 {"PROYECTO": "demo", "DOMINIO": "tienda.com",
+                  "ODOO_HOST": "demo-odoo"})
+    assert sin_renderizar(out) == []
+    assert "proxy_pass http://demo-odoo:8072;" in out
+    assert "proxy_pass http://demo-odoo:8069/;" in out
+    assert "http://odoo:" not in out and "server odoo:" not in out
+
+
+def test_nginx_dia1_modos():
+    from omc.core import render, template_text, sin_renderizar
+    clasico = render(template_text("nginx.conf.tpl"),
+                     {"PROYECTO": "demo", "DOMINIO": "t.com", "ODOO_HOST": "odoo"})
+    assert sin_renderizar(clasico) == []
+    assert "upstream odoo {" in clasico and "proxy_pass http://odoo;" in clasico
+    proxy = render(template_text("nginx.conf.tpl"),
+                   {"PROYECTO": "demo", "DOMINIO": "t.com", "ODOO_HOST": "demo-odoo"})
+    assert sin_renderizar(proxy) == []
+    assert "upstream demo-odoo {" in proxy
+    assert "server demo-odoo:8069;" in proxy
+    assert "proxy_pass http://demo-odoo;" in proxy
+    # un solo upstream por archivo: dos sites no chocan en el proxy central
+    assert proxy.count("upstream ") == 1
+
+
+def test_proxy_compose_estructura():
+    from omc.compose import PROXY_NETWORK, generar_proxy_compose
+    from omc.core import sin_renderizar
+    out = generar_proxy_compose()
+    assert sin_renderizar(out) == []
+    assert out.count('"80:80"') == 1 and out.count('"443:443"') == 1  # único publicador
+    assert "./conf.d:/etc/nginx/conf.d/:ro" in out
+    assert "./letsencrypt:/etc/letsencrypt:ro" in out
+    assert "networks:\n  omc-proxy:\n    external: true" in out
+    assert PROXY_NETWORK == "omc-proxy"
+
+
+def _proj_proxy_site(tmp_path, env_extra=""):
+    p = tmp_path / "tienda"
+    p.mkdir()
+    (p / "docker-compose.yml").write_text(
+        "services:\n"
+        "  db:\n"
+        "    image: postgres:16\n"
+        "  odoo:\n"
+        "    image: odoo:18\n"
+        "    restart: always\n"
+        '    ports:\n      - "8070:8069"\n'
+        "    environment:\n"
+        "      - HOST=db\n"
+        "volumes:\n"
+        "  odoo-db-data:\n",
+        encoding="utf-8")
+    (p / ".env").write_text("ODOO_PORT=8070\n", encoding="utf-8")
+    (p / "config").mkdir()
+    (p / "config" / "odoo.conf").write_text("[options]\n", encoding="utf-8")
+    return p
+
+
+def test_parchear_compose_a_proxy(monkeypatch, tmp_path):
+    from omc.compose import parchear_compose_a_proxy
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    p = _proj_proxy_site(tmp_path)
+    res = parchear_compose_a_proxy(p, "tienda")
+    assert set(res["cambios"]) == {"container_name", "networks odoo", "expose",
+                                   "networks externa"}
+    txt = (p / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "container_name: tienda-odoo" in txt
+    assert '"8070:8069"' not in txt and '"8069"' in txt and '"8072"' in txt
+    assert "networks:\n  omc-proxy:\n    external: true" in txt
+    assert (p / "config" / "odoo.conf").read_text(encoding="utf-8").count(
+        "proxy_mode = True") == 0  # el helper no toca odoo.conf
+    # idempotente: segunda corrida no cambia nada
+    res2 = parchear_compose_a_proxy(p, "tienda")
+    assert res2 == {"cambios": []}
+    assert (p / "docker-compose.yml").read_text(encoding="utf-8") == txt
+
+
+def test_parchear_compose_a_proxy_rechaza_nginx_local(tmp_path):
+    import pytest
+    from omc.compose import parchear_compose_a_proxy
+    p = _proj_proxy_site(tmp_path)
+    with open(p / "docker-compose.yml", "a", encoding="utf-8") as f:
+        f.write("\n  nginx:\n    image: nginx:alpine\n")
+    with pytest.raises(SystemExit) as e:
+        parchear_compose_a_proxy(p, "tienda")
+    assert "80/443" in str(e.value.code)
+
+
+def test_asegurar_proxy_mode(tmp_path):
+    from omc.compose import asegurar_proxy_mode
+    p = tmp_path / "proj"
+    assert asegurar_proxy_mode(p) is False  # sin odoo.conf
+    (p / "config").mkdir(parents=True)
+    (p / "config" / "odoo.conf").write_text("[options]\nworkers = 4\n",
+                                            encoding="utf-8")
+    assert asegurar_proxy_mode(p) is True
+    txt = (p / "config" / "odoo.conf").read_text(encoding="utf-8")
+    assert "workers = 4" in txt and txt.count("proxy_mode = True") == 1
+    assert asegurar_proxy_mode(p) is False  # ya estaba
 
 
 def test_certonly_cmd_lleva_www():

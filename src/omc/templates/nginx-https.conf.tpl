@@ -1,6 +1,6 @@
 # Sitio odoo para {{PROYECTO}} (dominio {{DOMINIO}})
 # Estructura final tras validar certbot: HTTP->HTTPS, www->apex, bloque principal.
-# Odoo detrás: odoo:8069 (HTTP) + odoo:8072 (websocket/longpolling, requiere workers).
+# Odoo detrás: {{ODOO_HOST}}:8069 (HTTP) + {{ODOO_HOST}}:8072 (websocket/longpolling, requiere workers).
 
 # 1. Redirección HTTP (puerto 80) a HTTPS para ambos dominios
 server {
@@ -55,7 +55,7 @@ server {
 
     # Odoo WebSocket (longpolling; requiere workers en odoo.conf)
     location /websocket {
-        proxy_pass http://odoo:8072;
+        proxy_pass http://{{ODOO_HOST}}:8072;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection "upgrade";
@@ -67,7 +67,7 @@ server {
 
     # Proxy Principal Odoo (upstream = servicio odoo del compose)
     location / {
-        proxy_pass http://odoo:8069/;
+        proxy_pass http://{{ODOO_HOST}}:8069/;
         proxy_next_upstream error timeout invalid_header http_500 http_502 http_503 http_504;
         proxy_set_header Connection "upgrade";
         proxy_set_header Host $host;
