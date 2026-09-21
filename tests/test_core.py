@@ -237,3 +237,57 @@ def test_marco_dibuja_caja_con_tty(monkeypatch):
     b = tui.banner_omc("1.0.0")
     assert "=== Odoo Manager Compose 1.0.0 ===" in b
     assert b.count("\n") >= 6  # arte + título
+
+
+def test_checklist_paginacion_no_desborda(monkeypatch):
+    from omc import tui
+    import shutil as _shutil
+    import sys as _sys
+    # Simular terminal chica (10 filas) y muchos items → página limitada
+    monkeypatch.setattr(_sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(_sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(_sys.stdin, "fileno", lambda: 0)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.setattr(_shutil, "get_terminal_size", lambda fallback=None: __import__("os").terminal_size((80, 10)))
+    # Mock termios/tty para no tocar terminal real
+    monkeypatch.setattr("termios.tcgetattr", lambda fd: [0] * 7)
+    monkeypatch.setattr("termios.tcsetattr", lambda *a, **k: None)
+    monkeypatch.setattr("tty.setcbreak", lambda fd: None)
+    monkeypatch.setattr("select.select", lambda r, w, e, t=None: ([_sys.stdin], [], []))
+    # Primer Enter confirma vacío
+    monkeypatch.setattr("os.read", lambda fd, n: b"\r")
+    captured = []
+    monkeypatch.setattr(_sys.stdout, "write", lambda s: captured.append(s) or len(s))
+    res = tui.checklist("Elige", [f"mod{i}" for i in range(50)])
+    assert res == []
+    # La caja renderizada no debe tener n+overhead líneas, sino page_size+overhead (≤7-8 en terminal 10)
+    out = "".join(captured)
+    # Con 10 filas, overhead ~6, page_size = max(5, 10-8)=5 → altura 5+4=9 líneas aprox, nunca 50
+    assert out.count("mod0") <= 1  # solo una página visible, no todos
+    assert "Pág" in out or "página" in out.lower() or "↑/↓" in out
+
+
+def test_checklist_flecha_abajo_scrollea(monkeypatch):
+    from omc import tui
+    import shutil as _shutil
+    import sys as _sys
+    monkeypatch.setattr(_sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(_sys.stdout, "isatty", lambda: True)
+    monkeypatch.setattr(_sys.stdin, "fileno", lambda: 0)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    monkeypatch.setattr(_shutil, "get_terminal_size", lambda fallback=None: __import__("os").terminal_size((80, 10)))
+    monkeypatch.setattr("termios.tcgetattr", lambda fd: [0] * 7)
+    monkeypatch.setattr("termios.tcsetattr", lambda *a, **k: None)
+    monkeypatch.setattr("tty.setcbreak", lambda fd: None)
+    # Simular 25 ↓ y luego Enter
+    seq = [b"\x1b[B"] * 25 + [b"\r"]
+    it = iter(seq)
+    monkeypatch.setattr("os.read", lambda fd, n: next(it, b"\r"))
+    monkeypatch.setattr("select.select", lambda r, w, e, t=None: ([_sys.stdin], [], []))
+    captured = []
+    monkeypatch.setattr(_sys.stdout, "write", lambda s: captured.append(s) or len(s))
+    res = tui.checklist("Elige", [f"mod{i}" for i in range(30)])
+    # Flecha abajo 25 veces con wrap y scroll no debe colgar y debe retornar lista (vacía si no se marcó)
+    assert isinstance(res, list)

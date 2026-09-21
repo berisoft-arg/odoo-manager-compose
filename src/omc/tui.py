@@ -328,6 +328,16 @@ def checklist(titulo_txt: str, items: list, marcados=None, pie: str = None) -> l
             elif isinstance(m, int) and 0 <= m < n:
                 marcados_set.add(m)
     idx = 0
+    # Paginación dinámica: máx 20, ajustado al alto de la terminal
+    import shutil
+    try:
+        rows = shutil.get_terminal_size().lines
+    except Exception:  # noqa: BLE001
+        rows = 24
+    overhead = 6  # borde+titulo+pie+base+separador
+    page_size = min(20, max(5, rows - overhead - 2))
+    page_size = min(page_size, n) if n else 5
+    offset = 0
     try:
         fd = sys.stdin.fileno()
         old = termios.tcgetattr(fd)
@@ -350,10 +360,28 @@ def checklist(titulo_txt: str, items: list, marcados=None, pie: str = None) -> l
         return f" {c(box, _GRIS)} {texto_menu(texto)}"
 
     def _pinta(sel: int):
+        # Ventana visible
+        nonlocal offset
+        # Ajustar offset para que sel sea visible (flecha abajo scrollea)
+        if sel < offset:
+            offset = sel
+        elif sel >= offset + page_size:
+            offset = sel - page_size + 1
+        visible = items[offset:offset + page_size]
         lineas = []
-        for i, it in enumerate(items):
+        for j, it in enumerate(visible):
+            i = offset + j
             lineas.append(_line(i, it, i == sel))
-        return marco(titulo_txt, lineas, pie=pie or "↑/↓ mueve · Espacio marca · a todos/n ninguno · Enter confirma · ESC sale")
+        # Pie con paginación si hace falta
+        cur_pie = pie
+        if cur_pie is None:
+            if n > page_size:
+                cur_page = offset // page_size + 1
+                tot_pages = (n + page_size - 1) // page_size
+                cur_pie = f"↑/↓ mueve · Espacio marca · a todos/n ninguno · Enter confirma · ESC sale · Pág {cur_page}/{tot_pages} ({offset+1}-{min(offset+page_size,n)}/{n})"
+            else:
+                cur_pie = "↑/↓ mueve · Espacio marca · a todos/n ninguno · Enter confirma · ESC sale"
+        return marco(titulo_txt, lineas, pie=cur_pie)
 
     altura = 0
     try:
