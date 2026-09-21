@@ -2288,7 +2288,7 @@ def menu_principal() -> str:
     acciones = [
         ("crear", "Crear proyecto nuevo (docker-compose Odoo)"),
         ("sync", "Descargar módulos y aplicar (bundle/lista + deps + rebuild)"),
-        ("localizacion", "Instalacion dependencias Localizacion Argentina"),
+        ("localizacion", "Instalación dependencias Localización Argentina"),
         ("web", "Configurar web nginx + certbot [prod]"),
         ("rclone", "Configurar rclone / Google Drive [prod]"),
         ("monitor", "Ver monitor web (contenedores + logs)"),

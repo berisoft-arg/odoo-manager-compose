@@ -16,7 +16,7 @@
 
 1. [Qué es y qué genera](#1-qué-es-y-qué-genera)
 2. [Requisitos](#2-requisitos)
-3. [Inicio rápido](#3-inicio-rápido)
+3. [Inicio rápido (en tu máquina)](#3-inicio-rápido-en-tu-máquina)
 4. [El asistente paso a paso](#4-el-asistente-paso-a-paso)
 5. [Módulos: bundle, lista y terceros](#5-módulos-bundle-lista-y-terceros)
 6. [`omc addons` (referencia avanzada)](#6-omc-addons-referencia-avanzada)
@@ -26,11 +26,11 @@
 10. [Puertos y múltiples instancias](#10-puertos-y-múltiples-instancias)
 11. [Docker útil](#11-docker-útil)
 12. [Solución de problemas](#12-solución-de-problemas)
-13. [Archivos del dir maestro](#13-archivos-del-dir-maestro)
-14. [Monitor web](#14-monitor-web-flask-solo-lectura)
+13. [Dónde vive cada cosa (estándar VPS)](#13-dónde-vive-cada-cosa-estándar-vps)
+14. [Monitor web](#14-monitor-web-src-omc-monitor-app-py-flask-solo-lectura)
 15. [Instalación (venv, sin Docker)](#15-instalación-venv-sin-docker)
 16. [Migración entre versiones Odoo](#16-migración-entre-versiones-odoo-oca)
-17. [VPS con deploy-vps.sh](#17-vps-con-deploy-vpssh)
+17. [VPS con deploy-vps.sh](#17-vps-con-deploy-vps-sh)
 
 ---
 
@@ -114,7 +114,7 @@ cd ~/odoo-manager-compose
 omc     # sin flags abre el menú:
 #   1) Crear proyecto nuevo (docker-compose Odoo)
 #   2) Descargar módulos y aplicar (bundle/lista + deps + rebuild)
-#   3) Instalacion dependencias Localizacion Argentina
+#   3) Instalación dependencias Localización Argentina
 #   4) Configurar web nginx + certbot [prod]
 #   5) Configurar rclone / Google Drive [prod]
 #   6) Ver monitor web (muestra URL y token del servicio; si no hay, los pide)
@@ -255,7 +255,7 @@ omc addons add --repo MiRepo --url https://github.com/MiOrg/MiRepo --branch 18.0
 export GITHUB_TOKEN=ghp_xxx   # privados https (por env: solo memoria, jamás en el proyecto)
 ```
 
-### 5.4bis GitHub: token + tu org/usuario (menú 7, o `omc github`)
+### 5.5 GitHub: token + tu org/usuario (menú 7, o `omc github`)
 
 Guarda token + org en `~/.config/omc/config.json` (0600, nunca en proyectos).
 Da: **privados** (clone + API), **cuota** (5000 vs 60 req/h) y **búsqueda de dependencias
@@ -269,11 +269,11 @@ inyecta por header sin guardarlo en el repo). El "name" y "company" del perfil s
 fantasía: lo que vale es el **username** (dueño) + el **nombre corto** del repo
 (`github.com/<username>/<repo>`).
 
-### 5.5 Módulos propios
+### 5.6 Módulos propios
 
 Directo en `addons/custom/` (tu git del proyecto los versiona, sin helper).
 
-### 5.6 Localización AR AdHoc (menú 3, o `omc localizar --proyecto <ruta>`)
+### 5.7 Localización AR AdHoc (menú 3, o `omc localizar --proyecto <ruta>`)
 
 La opción 3 instala el bundle AdHoc en el proyecto elegido, guarda
 `addons/localizacion.json` **con los requirements que trae el repo en esa rama**
@@ -404,7 +404,7 @@ nivel 6, buffers 16 8k, tipos texto/json/js/xml/imágenes).
 
 Sin dominio no hay certbot: queda prod directo (el asistente lo normaliza con aviso).
 
-### 7.2bis Proxy multinstancia (nginx compartido por subdominio)
+### 7.3 Proxy multinstancia (nginx compartido por subdominio)
 
 Un solo publicador 80/443 por host para N proyectos prod con dominio. Es la
 **opción 11 del menú**. Avanzado sin menú:
@@ -439,7 +439,7 @@ Reglas duras (fallan limpio, sin escribir a medias):
   de entrada). Después, un backend caído solo tira su propio site (5xx):
   los upstreams se resuelven por request y el reload nunca voltea al resto.
 
-### 7.2ter Tutorial: dos subdominios con HTTPS en un host
+### 7.4 Tutorial: dos subdominios con HTTPS en un host
 
 Ejemplo: `tienda.com` + `app.tienda.com` en el mismo VPS, cada uno un proyecto
 prod. Bloques copiables por paso.
@@ -488,7 +488,7 @@ curl -sI https://app.tienda.com | head -1
 omc list   # ambos proyectos con su DOMINIO
 ```
 
-Paso 7 — mantenimiento: renew centralizado (ver cron semanal en §7.2bis). **Baja de
+Paso 7 — mantenimiento: renew centralizado (ver cron semanal en §7.3). **Baja de
 un site**: `rm /opt/proxy/conf.d/<dominio>.conf` + `docker compose exec nginx
 nginx -s reload` en `/opt/proxy` + `docker compose run --rm certbot delete
 --cert-name <dominio>` (si no, renew sigue intentando un dominio que ya no apunta).
@@ -497,7 +497,7 @@ siguen sanos (upstreams por variable, sin bloques estáticos).
 
 Si algo falla (DNS, 80 ocupado, cert fallido que deja día-1 HTTP): ver §12.
 
-### 7.3 Configurar rclone después (Google Drive)
+### 7.5 Configurar rclone después (Google Drive)
 
 Es la **opción 5 del menú**. Avanzado sin menú:
 
@@ -604,7 +604,7 @@ filestore en `backups/full_backup_<bd>_dayN.tar.gz` (+ Drive si hay rclone).
 # datos: cp full_backup_<bd>_dayN.tar.gz <nuevo>/backups/ && menú opción 9
 ```
 
-**3bis) Llevar el bundle a otro servidor.** El json es texto plano y chico; desde
+**4) Llevar el bundle a otro servidor.** El json es texto plano y chico; desde
 tu instancia local de pruebas al destino (VPS):
 
 ```bash
@@ -617,7 +617,7 @@ default (`addons-bundle.json` en la raíz del proyecto) o cualquier ruta absolut
 (ej. `~/bundles/tienda.json`) sin pisar nada. Si versionás el proyecto en git,
 commitear el bundle es la vía más repetible.
 
-**4) Restore (datos).** Menú opción 9 o `./scripts/restore.sh`: lista los tgz
+**5) Restore (datos).** Menú opción 9 o `./scripts/restore.sh`: lista los tgz
 (locales o Drive), doble confirmación, para odoo, recrea la BD (`DROP+CREATE`;
 si no puede, `--clean --if-exists`, útil con backups de instalaciones desde fuente),
 restaura filestore y levanta.

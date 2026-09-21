@@ -44,7 +44,7 @@ pip install odoo-manager-compose --break-system-packages
 omc --version  # abre el menú 1-12
 ```
 
-> Manual completo: [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker) y [§17 VPS](Manual-OMC.md#17-vps-con-deploy-vpssh).
+> Manual completo: [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker) y [§17 VPS](Manual-OMC.md#17-vps-con-deploy-vps-sh).
 
 ## Uso rápido: el menú básico (1-12, 0 sale)
 
