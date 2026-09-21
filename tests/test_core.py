@@ -219,7 +219,7 @@ def test_menu_sin_color_fuera_de_tty(monkeypatch, capsys, tmp_path):
 def test_banner_marco_seccion_planos_sin_tty(monkeypatch):
     from omc import tui
     monkeypatch.setattr("sys.stdout.isatty", lambda: False)
-    assert tui.banner_omc("9.9.9") == "=== Odoo Manager Compose 9.9.9 ==="
+    assert tui.banner_omc("9.9.9") == "\n=== Odoo Manager Compose 9.9.9 ==="
     assert tui.marco("T", ["a", "b"], pie="P") == "T\na\nb\nP"
     assert tui.marco("T", ["a"]) == "T\na"
     assert tui.separador() == "=" * 60

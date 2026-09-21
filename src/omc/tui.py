@@ -9,18 +9,21 @@ otro caso (tests, pipes, cron, --json) sale texto plano, byte-idéntico.
 import os
 import sys
 
-# Paleta sutil (familia del monitor web): texto normal siempre, color en claves.
+# Paleta OMC: solo Azul marino, blanco y gris (+ negrita). Todo lo demás es texto plano.
 _NEGRITA = "1"
-_TENUE = "2"
-_ROJO = "31"
-_VERDE = "32"
-_AMARILLO = "33"
-_MAGENTA = "35"
-_CIAN = "36"
+_AZUL_MARINO = "34"
 _BLANCO = "37"
+_GRIS = "90"
 _FONDO_AZUL = "44"
 _FIN = "0"
 _ANCHO_BARRA = 60
+# Alias para compatibilidad (no usados, mantenidos por si se importan)
+_ROJO = _BLANCO
+_VERDE = _BLANCO
+_AMARILLO = _GRIS
+_MAGENTA = _BLANCO
+_CIAN = _AZUL_MARINO
+_TENUE = _GRIS
 
 
 def usa_color() -> bool:
@@ -44,37 +47,42 @@ def c(texto: str, *estilos: str) -> str:
 
 def titulo(texto: str) -> str:
     """Encabezados (banner, secciones == ... ==)."""
-    return c(texto, _NEGRITA, _MAGENTA)
+    return c(texto, _NEGRITA, _BLANCO)
 
 
 def numero(texto: str) -> str:
     """Números de opción del menú (con su espacio inicial adentro)."""
-    return c(texto, _CIAN)
+    return c(texto, _NEGRITA, _AZUL_MARINO)
 
 
 def tenue(texto: str) -> str:
     """Texto secundario (salir, tips)."""
-    return c(texto, _TENUE)
+    return c(texto, _GRIS)
+
+
+def texto_menu(texto: str) -> str:
+    """Texto de opción del menú (siempre negrita)."""
+    return c(texto, _NEGRITA, _BLANCO)
 
 
 def ok(texto: str) -> str:
     """Éxitos (✓)."""
-    return c(texto, _VERDE)
+    return c(texto, _BLANCO)
 
 
 def warn(texto: str) -> str:
     """Avisos (⚠)."""
-    return c(texto, _AMARILLO)
+    return c(texto, _GRIS)
 
 
 def err(texto: str) -> str:
     """Errores (✗)."""
-    return c(texto, _ROJO)
+    return c(texto, _NEGRITA, _BLANCO)
 
 
 def separador() -> str:
-    """Línea divisoria estilo installer (tenue con color, invisible sin él)."""
-    return c("=" * _ANCHO_BARRA, _TENUE)
+    """Línea divisoria estilo installer (gris con color, invisible sin él)."""
+    return c("=" * _ANCHO_BARRA, _GRIS)
 
 
 def seccion(texto: str) -> str:
@@ -101,10 +109,10 @@ def marco(titulo_txt: str, contenido: list, pie: str = None) -> str:
     ancho = max([_ancho_visible(titulo_txt)] +
                 [_ancho_visible(t) for t in contenido] +
                 [_ancho_visible(pie or "")]) + 4
-    borde = c("┌" + "─" * ancho + "┐", _TENUE)
-    base = c("└" + "─" * ancho + "┘", _TENUE)
-    li = c("│", _TENUE)
-    ld = c("│", _TENUE)
+    borde = c("┌" + "─" * ancho + "┐", _GRIS)
+    base = c("└" + "─" * ancho + "┘", _GRIS)
+    li = c("│", _GRIS)
+    ld = c("│", _GRIS)
 
     def _fila(texto: str) -> str:
         rel = _ancho_visible(texto)
@@ -120,10 +128,10 @@ def marco(titulo_txt: str, contenido: list, pie: str = None) -> str:
 def banner_omc(version: str) -> str:
     """Banner de arranque estilo generador (arte ASCII + nombre + versión).
 
-    Sin color: una sola línea, igual que siempre.
+    Sin color: una sola línea, igual que siempre (con línea en blanco previa).
     """
     if not usa_color():
-        return f"=== Odoo Manager Compose {version} ==="
+        return f"\n=== Odoo Manager Compose {version} ==="
     arte = [
         " ██████╗ ███╗   ███╗ ██████╗",
         " ██╔══██╗████╗ ████║██╔════╝",
@@ -132,9 +140,9 @@ def banner_omc(version: str) -> str:
         " ╚██████╔╝██║ ╚═╝ ██║╚██████╗",
         "  ╚═════╝ ╚═╝     ╚═╝ ╚═════╝",
     ]
-    lineas = [c(l, _NEGRITA, _CIAN) for l in arte]
+    lineas = [c(l, _NEGRITA, _BLANCO) for l in arte]
     lineas.append(titulo(f"=== Odoo Manager Compose {version} ==="))
-    return "\n".join(lineas)
+    return "\n" + "\n".join(lineas)
 
 
 def es_interactivo() -> bool:

@@ -23,6 +23,7 @@ from .tui import (
     titulo,
     numero,
     tenue,
+    texto_menu,
     ok,
     err,
     marco,
@@ -2263,7 +2264,7 @@ def menu_principal() -> str:
     print(marco(
         "¿Qué quiere hacer?",
         [tenue("(Tip: URL y token del monitor en la opción 6)")] +
-        [f"  {numero(f'{i})')} {lab}" for i, lab in enumerate(labels, 1)] +
+        [f"  {numero(f'{i})')} {texto_menu(lab)}" for i, lab in enumerate(labels, 1)] +
         [tenue("  0) Salir")],
         pie="0 sale · Enter = default",
     ))
