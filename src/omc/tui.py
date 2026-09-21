@@ -294,6 +294,125 @@ def elegir_interactivo(opciones: list, titulo_txt: str = "¿Qué quiere hacer?",
             pass
 
 
+def checklist(titulo_txt: str, items: list, marcados=None, pie: str = None) -> list | None:
+    """Checklist multi-selección estilo Debian: [*]/[ ] con Tab/Espacio/Enter.
+
+    Gate idéntico a elegir_interactivo → None si sin tty (fallback textual).
+    Con tty: ↑/↓ mueve foco, Espacio/Tab toggle, a todos, n ninguno, Enter confirma, ESC/q vacía.
+    Retorna lista de items seleccionados (puede ser []) o None para fallback.
+    """
+    if os.environ.get("NO_COLOR") is not None:
+        return None
+    if os.environ.get("TERM", "") == "dumb":
+        return None
+    try:
+        if not sys.stdin.isatty() or not sys.stdout.isatty():
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        import select
+        import termios
+        import tty
+    except Exception:  # noqa: BLE001
+        return None
+    n = len(items)
+    if n == 0:
+        return []
+    # Estado: set de índices marcados
+    marcados_set = set()
+    if marcados:
+        for m in marcados:
+            if m in items:
+                marcados_set.add(items.index(m))
+            elif isinstance(m, int) and 0 <= m < n:
+                marcados_set.add(m)
+    idx = 0
+    try:
+        fd = sys.stdin.fileno()
+        old = termios.tcgetattr(fd)
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        sys.stdout.write("\x1b[?25l")
+        sys.stdout.flush()
+    except Exception:  # noqa: BLE001
+        pass
+
+    def _line(i: int, texto: str, focused: bool) -> str:
+        box = "[*]" if i in marcados_set else "[ ]"
+        raw = f"{box} {texto}"
+        if focused:
+            return c(f" {raw} ", _NEGRITA, _BLANCO, _FONDO_AZUL)
+        # No foco: caja gris, texto blanco negrita para el nombre
+        if i in marcados_set:
+            return f" {c(box, _NEGRITA, _BLANCO)} {texto_menu(texto)}"
+        return f" {c(box, _GRIS)} {texto_menu(texto)}"
+
+    def _pinta(sel: int):
+        lineas = []
+        for i, it in enumerate(items):
+            lineas.append(_line(i, it, i == sel))
+        return marco(titulo_txt, lineas, pie=pie or "↑/↓ mueve · Espacio marca · a todos/n ninguno · Enter confirma · ESC sale")
+
+    altura = 0
+    try:
+        tty.setcbreak(fd)
+        out = _pinta(idx)
+        sys.stdout.write(out + "\n")
+        sys.stdout.flush()
+        altura = out.count("\n") + 1
+        while True:
+            r, _, _ = select.select([sys.stdin], [], [], 0.2)
+            if not r:
+                continue
+            ch = os.read(fd, 3)
+            if not ch:
+                continue
+            if ch in (b"\x1b[A", b"\x1bOA"):  # arriba
+                idx = (idx - 1) % n
+            elif ch in (b"\x1b[B", b"\x1bOB", b"\t", b"\x09"):  # abajo o Tab
+                idx = (idx + 1) % n
+            elif ch in (b" ", b"\x20"):  # Espacio toggle
+                if idx in marcados_set:
+                    marcados_set.remove(idx)
+                else:
+                    marcados_set.add(idx)
+            elif ch in (b"a", b"A"):
+                marcados_set = set(range(n))
+            elif ch in (b"n", b"N"):
+                marcados_set.clear()
+            elif ch in (b"\r", b"\n"):
+                return [items[i] for i in sorted(marcados_set)]
+            elif ch == b"\x1b":  # ESC
+                return []
+            elif ch in (b"q", b"Q"):
+                return []
+            else:
+                continue
+            try:
+                sys.stdout.write(f"\x1b[{altura}A")
+                sys.stdout.write("\x1b[J")
+                out = _pinta(idx)
+                sys.stdout.write(out + "\n")
+                sys.stdout.flush()
+                altura = out.count("\n") + 1
+            except Exception:  # noqa: BLE001
+                pass
+    except KeyboardInterrupt:
+        return []
+    finally:
+        try:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            sys.stdout.write("\x1b[?25h\n")
+            sys.stdout.flush()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def es_interactivo() -> bool:
     return sys.stdin.isatty()
 

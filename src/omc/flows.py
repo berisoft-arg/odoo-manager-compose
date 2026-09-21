@@ -247,20 +247,36 @@ def paso_addons_interactivo(salida: Path, version: str, sin_pregunta: bool = Fal
             instalar_addon(salida, org_label if desde_url else "custom",
                              repo, [repo], version, url, branch=br)
             return
-        print(f"\n-- Módulos en {repo}@{br} ({len(modulos_disp)}) --")
-        for i, m in enumerate(modulos_disp, 1):
-            print(f"  {i:3}) {m}")
-        mods_raw = preguntar(
-            "Módulos (números, nombres o 'todo'; coma; vacío=ninguno)", ""
-        ).strip()
-        if not mods_raw:
-            return
-        modulos, invalidos = parse_seleccion(mods_raw, modulos_disp)
-        for inv in invalidos:
-            print(f"  ⚠ '{inv}' no existe en {repo}@{br}, omitido.")
-        if not modulos:
-            print("  Nada válido, no se descarga nada.")
-            return
+        # Checklist primero, fallback a entrada textual
+        sel = None
+        try:
+            from .tui import checklist
+            sel = checklist(f"Elige módulos de {repo}@{br} ({len(modulos_disp)})", modulos_disp)
+        except Exception:  # noqa: BLE001
+            sel = None
+        if sel is not None:
+            if not sel:
+                return
+            modulos = [m for m in sel if m in modulos_disp]
+            invalidos = []
+            if not modulos:
+                print("  Nada seleccionado, no se descarga nada.")
+                return
+        else:
+            print(f"\n-- Módulos en {repo}@{br} ({len(modulos_disp)}) --")
+            for i, m in enumerate(modulos_disp, 1):
+                print(f"  {i:3}) {m}")
+            mods_raw = preguntar(
+                "Módulos (números, nombres o 'todo'; coma; vacío=ninguno)", ""
+            ).strip()
+            if not mods_raw:
+                return
+            modulos, invalidos = parse_seleccion(mods_raw, modulos_disp)
+            for inv in invalidos:
+                print(f"  ⚠ '{inv}' no existe en {repo}@{br}, omitido.")
+            if not modulos:
+                print("  Nada válido, no se descarga nada.")
+                return
         if desde_url:
             instalar_addon_url(salida, org_label, repo, url, modulos, version, branch=br)
         else:
@@ -318,6 +334,29 @@ def paso_addons_interactivo(salida: Path, version: str, sin_pregunta: bool = Fal
             )
             mostrar_y_elegir(org, repo, url, False)
             otra = preguntar("¿Agregar otro repo?", "no", ["si", "no"])
+            if otra != "si":
+                break
+            continue
+        # Checklist multi-repo primero, fallback a texto
+        sel_repos = None
+        try:
+            from .tui import checklist
+            sel_repos = checklist(f"Elige repos de {org} ({len(repos)})", repos)
+        except Exception:  # noqa: BLE001
+            sel_repos = None
+        if sel_repos is not None:
+            if not sel_repos:
+                continue
+            for repo in sel_repos:
+                if repo not in repos:
+                    print(f"  ⚠ '{repo}' no está en el catálogo, omitido.")
+                    continue
+                url = next(
+                    (e["url"] for e in catalogo.get(org, []) if e["repo"] == repo),
+                    f"https://github.com/{KNOWN_ORGS.get(org, org)}/{repo}",
+                )
+                mostrar_y_elegir(org, repo, url, False)
+            otra = preguntar("¿Agregar otro origen?", "no", ["si", "no"])
             if otra != "si":
                 break
             continue
