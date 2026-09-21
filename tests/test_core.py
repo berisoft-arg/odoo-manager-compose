@@ -180,3 +180,37 @@ def test_run_list_ve_proyectos_en_root(monkeypatch, tmp_path, capsys):
     run_list(SimpleNamespace())
     out = capsys.readouterr().out
     assert "smoke" in out and "8070" in out
+
+
+def test_color_solo_con_tty(monkeypatch):
+    from omc import tui
+    # sin tty: texto pelado siempre
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+    assert tui.usa_color() is False
+    assert tui.c("hola", "1") == "hola"
+    assert tui.titulo("T") == "T" and tui.ok("x") == "x"
+    # con tty: pinta
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    assert tui.usa_color() is True
+    assert tui.c("hola", "1") == "\033[1mhola\033[0m"
+    # NO_COLOR o dumb: pelado aunque haya tty
+    monkeypatch.setenv("NO_COLOR", "1")
+    assert tui.usa_color() is False
+    monkeypatch.delenv("NO_COLOR")
+    monkeypatch.setenv("TERM", "dumb")
+    assert tui.usa_color() is False
+
+
+def test_menu_sin_color_fuera_de_tty(monkeypatch, capsys, tmp_path):
+    # menú en no-tty: byte-idéntico al histórico (sin ANSI)
+    import sys as _sys
+    from omc.flows import menu_principal
+    monkeypatch.setattr(_sys.stdin, "isatty", lambda: False)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "0")
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    assert menu_principal() == "crear"  # sin tty: default sin leer input
+    out = capsys.readouterr().out
+    assert "\033[" not in out
+    assert "=== Odoo Manager Compose" in out and " 11)" in out

@@ -1,9 +1,72 @@
-"""Entrada interactiva unificada (librería ask_*).
+"""Entrada interactiva unificada (librería ask_*) + color sutil de terminal.
 
 Toda pregunta al usuario pasa por acá: una sola puerta por tipo de dato,
 defaults seguros sin tty y sin reventar ante basura o EOF.
+
+Color: solo si la salida es tty, sin NO_COLOR y con TERM útil. En cualquier
+otro caso (tests, pipes, cron, --json) sale texto plano, byte-idéntico.
 """
+import os
 import sys
+
+# Paleta sutil (familia del monitor web): texto normal siempre, color en claves.
+_NEGRITA = "1"
+_TENUE = "2"
+_ROJO = "31"
+_VERDE = "32"
+_AMARILLO = "33"
+_MAGENTA = "35"
+_CIAN = "36"
+_FIN = "0"
+
+
+def usa_color() -> bool:
+    """True solo si tiene sentido pintar (tty real, sin NO_COLOR, TERM útil)."""
+    if os.environ.get("NO_COLOR") is not None:
+        return False
+    if os.environ.get("TERM", "") == "dumb":
+        return False
+    try:
+        return sys.stdout.isatty()
+    except Exception:  # noqa: BLE001
+        return False
+
+
+def c(texto: str, *estilos: str) -> str:
+    """Envuelve en códigos ANSI solo si usa_color(); si no, texto pelado."""
+    if not estilos or not usa_color():
+        return texto
+    return f"\033[{';'.join(estilos)}m{texto}\033[{_FIN}m"
+
+
+def titulo(texto: str) -> str:
+    """Encabezados (banner, secciones == ... ==)."""
+    return c(texto, _NEGRITA, _MAGENTA)
+
+
+def numero(texto: str) -> str:
+    """Números de opción del menú (con su espacio inicial adentro)."""
+    return c(texto, _CIAN)
+
+
+def tenue(texto: str) -> str:
+    """Texto secundario (salir, tips)."""
+    return c(texto, _TENUE)
+
+
+def ok(texto: str) -> str:
+    """Éxitos (✓)."""
+    return c(texto, _VERDE)
+
+
+def warn(texto: str) -> str:
+    """Avisos (⚠)."""
+    return c(texto, _AMARILLO)
+
+
+def err(texto: str) -> str:
+    """Errores (✗)."""
+    return c(texto, _ROJO)
 
 
 def es_interactivo() -> bool:
@@ -46,7 +109,7 @@ def ask_opcion(prompt: str, opciones: list, default=None, aliases: dict = None) 
         low = r.lower().replace(" ", "")
         if low in aliases:
             return aliases[low]
-        print("  Opción no válida, intenta de nuevo.")
+        print(err("  Opción no válida, intenta de nuevo."))
 
 
 def ask_si_no(prompt: str, default_no: bool = True) -> bool:
@@ -67,7 +130,7 @@ def ask_puerto(prompt: str, default: int) -> int:
             pass
         if not es_interactivo():
             return default
-        print("  Puerto inválido (1-65535).")
+        print(err("  Puerto inválido (1-65535)."))
 
 
 def ask_float(prompt: str, default: float) -> float:
@@ -79,7 +142,7 @@ def ask_float(prompt: str, default: float) -> float:
             pass
         if not es_interactivo():
             return default
-        print("  Número inválido.")
+        print(err("  Número inválido."))
 
 
 # Compat: el código viejo llamaba preguntar()/preguntar_si_no().

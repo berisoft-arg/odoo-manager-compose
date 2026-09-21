@@ -101,6 +101,8 @@ addons_path = /mnt/extra-addons/custom,/mnt/extra-addons,/mnt/extra-addons/adhoc
 - Para repos privados https: `export GITHUB_TOKEN=...` (por env nunca se guarda;
   el menú 7 puede guardarlo en `~/.config/omc/config.json` 0600, jamás en proyectos).
 - Puertos libres en el host (el asistente los valida y sugiere libres).
+- El menú usa color sutil solo en terminal interactiva; con `NO_COLOR=1`,
+  `TERM=dumb`, pipes o `--json` la salida es texto plano.
 
 ---
 
