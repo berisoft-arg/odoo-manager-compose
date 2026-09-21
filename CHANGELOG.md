@@ -9,6 +9,8 @@
   templates nginx parametrizados con `{{ODOO_HOST}}`; sites proxy sin
   `upstream`: `resolver 127.0.0.11` + `proxy_pass` con variable (un backend
   caído no voltea al resto). Opción 11 del menú.
+- **Migrar a otro VPS**: `12) Migrar instancia a otro VPS` (paquete completo) —
+  para odoo, backup consistente y empaqueta bundle+backups+env en un tar.gz.
 - **Seguridad en restore**: `odoo neutralize -d` opt-in solo-dev
   (`--neutralizar`, pregunta default NO).
 - **Agentes**: `AGENTS.md` por proyecto, `omc list/doctor --json` (doctor exit 2

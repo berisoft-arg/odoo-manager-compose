@@ -132,6 +132,11 @@ def build_parser():
     te.add_argument("--proyecto", default=None)
     te.add_argument("--db", default=None, help="Base (si falta, la pide)")
 
+    mv = sub.add_parser("migrar-vps", help="Migrar instancia a otro VPS (paquete completo)")
+    mv.add_argument("--proyecto", default=None)
+    mv.add_argument("--todo", action="store_true", help="Todos los proyectos prod del host")
+    mv.add_argument("--consistente", action="store_true", help="Parar db también (corte total, más consistente)")
+
     return p
 
 
@@ -152,11 +157,11 @@ def _ejecutar_accion_menu(accion):
             rclone_remote=None, vcpus=None, ram_gb=None, proyecto=None
         ))
         return
-    # resto de acciones: monitor/github/proxy no necesitan proyecto
-    if accion in ("monitor", "github", "proxy"):
-        from .flows import run_monitor, run_github, run_proxy
+    # resto de acciones: monitor/github/proxy/migrar-vps no necesitan proyecto si es --todo
+    if accion in ("monitor", "github", "proxy", "migrar_vps"):
+        from .flows import run_monitor, run_github, run_proxy, run_migrar_vps
         {"monitor": run_monitor, "github": run_github,
-         "proxy": run_proxy}[accion](SimpleNamespace(proyecto=None))
+         "proxy": run_proxy, "migrar_vps": run_migrar_vps}[accion](SimpleNamespace(proyecto=None))
         return
     # resto de acciones necesitan proyecto (se elige uno)
     # reutilizar lógica de flows.elegir_proyecto si existe
@@ -267,6 +272,9 @@ def main(argv=None):
     elif args.cmd == "proxy":
         from .flows import run_proxy_init
         run_proxy_init(getattr(args, "salida", None))
+    elif args.cmd == "migrar-vps":
+        from .flows import run_migrar_vps
+        run_migrar_vps(args)
     elif args.cmd in ("logs", "update", "test"):
         from .flows import run_logs, run_update, run_test
         {"logs": run_logs, "update": run_update,

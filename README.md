@@ -68,7 +68,7 @@ omc --version && omc list
 
 Detalles, venv manual y otras vías: ver [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker).
 
-## Uso rápido: el menú básico (1-11, 0 sale)
+## Uso rápido: el menú básico (1-12, 0 sale)
 
 ```bash
 omc                 # abre el menú
@@ -76,7 +76,7 @@ omc                 # abre el menú
 
 1 crear proyecto · 2 descargar módulos · 3 localizar AR · 4 web nginx+TLS ·
 5 rclone/Drive · 6 monitor · 7 GitHub · 8 backup · 9 restore · 10 migrar OCA ·
-11 proxy multinstancia (nginx compartido por subdominio).
+11 proxy multinstancia (nginx compartido por subdominio) · 12 migrar a otro VPS.
 Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup.
 
 Menú avanzado (subcomandos directos como `omc crear --flags`,

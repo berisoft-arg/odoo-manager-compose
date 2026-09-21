@@ -2257,6 +2257,7 @@ def menu_principal() -> str:
         ("restore", "Restaurar BD [prod]"),
         ("migrar", "Migrar proyecto a nueva versión Odoo (OCA)"),
         ("proxy", "Proxy multinstancia (nginx compartido por subdominio)"),
+        ("migrar_vps", "Migrar instancia a otro VPS (paquete completo)"),
         ("salir", "Salir"),
     ]
     print(banner_omc(PKG_VERSION))
@@ -2685,6 +2686,146 @@ def run_test(args):
     if r.returncode != 0:
         sys.exit(f"Fallaron los tests de {mod} (revisá el log de arriba).")
     print(f"✓ Tests de {mod} OK.")
+
+
+def run_migrar_vps(args):
+    """Migrar instancia a otro VPS: para odoo, backup completo y empaqueta.
+
+    Genera un tar.gz transportable con addons-bundle.json + full_backup(s)
+    + .env + repos.json + MANIFEST.json. No toca volúmenes nombrados.
+    """
+    import tarfile
+    import time
+
+    todo = bool(getattr(args, "todo", False))
+    consistente = bool(getattr(args, "consistente", False))
+    # Resolver alcance
+    if todo:
+        base = projects_home()
+        try:
+            targets = [d for d in sorted(base.iterdir())
+                       if d.is_dir() and (d / "docker-compose.yml").exists()]
+        except OSError:
+            targets = []
+        # excluir proxy (infra)
+        targets = [p for p in targets if p.name != "proxy"]
+        if not targets:
+            print(f"No hay proyectos en {base}")
+            return
+    else:
+        # un proyecto: menú o --proyecto
+        try:
+            proj = _resolver_proyecto(args) if getattr(args, "proyecto", None) else elegir_proyecto()
+        except SystemExit as e:
+            print(e.code)
+            return
+        targets = [proj]
+    # Validar prod
+    validos = []
+    for p in targets:
+        if not exigir_prod(p, f"Migrar {p.name}"):
+            continue
+        if not (p / "scripts" / "backup.sh").exists():
+            print(f"  ⚠ {p.name}: sin scripts/backup.sh (¿proyecto viejo?). Omitido.")
+            continue
+        validos.append(p)
+    if not validos:
+        print("Nada para migrar.")
+        return
+    # Parar escrituras y hacer backups
+    artefactos = []
+    for proj in validos:
+        print(f"\n== {proj.name} ==")
+        # parar odoo para consistencia filestore
+        print("  Parando odoo para backup consistente ...")
+        subprocess.run(["docker", "compose", "stop", "odoo"], cwd=str(proj))
+        if consistente:
+            subprocess.run(["docker", "compose", "stop", "db"], cwd=str(proj))
+            subprocess.run(["docker", "compose", "up", "-d", "db"], cwd=str(proj))
+            # esperar pg_isready como restore
+            for _ in range(30):
+                r = subprocess.run(["docker", "compose", "exec", "-T", "db",
+                                    "pg_isready", "-U", "odoo", "-d", "postgres"],
+                                   cwd=str(proj), stdout=subprocess.DEVNULL,
+                                   stderr=subprocess.DEVNULL)
+                if r.returncode == 0:
+                    break
+                time.sleep(2)
+        # listar BDs
+        bds = []
+        try:
+            r = subprocess.run(["docker", "compose", "exec", "-T", "db",
+                                "psql", "-U", "odoo", "-d", "postgres",
+                                "-tAX", "-c",
+                                "SELECT datname FROM pg_database WHERE datistemplate=false AND datname NOT IN ('postgres');"],
+                               cwd=str(proj), text=True, stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, timeout=30)
+            if r.returncode == 0:
+                bds = [b.strip() for b in (r.stdout or "").splitlines() if b.strip()]
+        except Exception:  # noqa: BLE001
+            pass
+        if not bds:
+            print("  ⚠ No pude listar BDs, omitido.")
+            subprocess.run(["docker", "compose", "start", "odoo"], cwd=str(proj))
+            continue
+        # asegurar bundle actualizado
+        try:
+            from .addonsops import actualizar_bundle_desde_estado
+            actualizar_bundle_desde_estado(proj)
+        except Exception:  # noqa: BLE001
+            pass
+        for bd in bds:
+            print(f"  Backup {bd} ...")
+            r = subprocess.run(["./scripts/backup.sh", bd], cwd=str(proj))
+            if r.returncode != 0:
+                print(f"  ⚠ backup de {bd} falló, omitido.")
+                continue
+            # buscar último full_backup generado
+            import glob as _glob
+            cands = sorted(_glob.glob(str(proj / "backups" / f"full_backup_{bd}_*.tar.gz")))
+            if cands:
+                artefactos.append((proj, Path(cands[-1])))
+        # levantar
+        subprocess.run(["docker", "compose", "start", "odoo"], cwd=str(proj))
+        if consistente:
+            subprocess.run(["docker", "compose", "up", "-d"], cwd=str(proj))
+    if not artefactos:
+        print("Sin backups generados, nada que empaquetar.")
+        return
+    # Empaquetado host
+    ts = time.strftime("%Y%m%d_%H%M%S")
+    host = __import__("socket").gethostname().split(".")[0]
+    out = projects_home() / f"migrar_{host}_{ts}.tar.gz"
+    # Manifest
+    manifest = {"host": host, "fecha": ts, "proyectos": []}
+    import hashlib as _hash
+    for proj, f in artefactos:
+        try:
+            sha = _hash.sha256(f.read_bytes()).hexdigest()[:12]
+        except Exception:  # noqa: BLE001
+            sha = ""
+        manifest["proyectos"].append({"proyecto": proj.name, "archivo": f.name, "sha": sha})
+    # Crear tar
+    import json as _json
+    import io as _io
+    with tarfile.open(out, "w:gz") as tf:
+        for proj, f in artefactos:
+            tf.add(str(f), arcname=f"{proj.name}/{f.name}")
+            # adjuntar bundle y env del proyecto
+            for rel in ["addons-bundle.json", ".env", "addons/repos.json", "config/odoo.conf"]:
+                src = proj / rel
+                if src.exists():
+                    tf.add(str(src), arcname=f"{proj.name}/{rel}")
+        # MANIFEST.json
+        data = _json.dumps(manifest, indent=2).encode()
+        ti = tarfile.TarInfo("MANIFEST.json")
+        ti.size = len(data)
+        ti.mtime = int(time.time())
+        tf.addfile(ti, _io.BytesIO(data))
+    print(f"\n✓ Paquete migrar en {out}")
+    print(f"  Proyectos: {', '.join(p.name for p in validos)}")
+    print("  Restaurar en destino: descomprimir y por cada proyecto ./scripts/restore.sh <bd> <tgz>")
+    # No borrar artefactos locales (ya están en backups/)
 
 
 def run_list_modules(args):

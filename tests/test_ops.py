@@ -126,6 +126,66 @@ def _proj_json(tmp_path, nombre="tienda", env_extra=""):
     return base, p
 
 
+def test_menu_12_es_migrar_vps(monkeypatch, capsys):
+    from omc.flows import menu_principal
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "12")
+    assert menu_principal() == "migrar_vps"
+    out = capsys.readouterr().out
+    assert " 12)" in out and "Migrar instancia a otro VPS" in out
+
+
+def test_cli_migrar_vps_flags():
+    from omc.cli import build_parser
+    assert build_parser().parse_args(["migrar-vps"]).todo is False
+    assert build_parser().parse_args(["migrar-vps", "--todo"]).todo is True
+    assert build_parser().parse_args(["migrar-vps", "--consistente"]).consistente is True
+
+
+def test_migrar_vps_paquete(monkeypatch, tmp_path, capsys):
+    import tarfile
+    from omc.flows import run_migrar_vps
+    base = tmp_path / "projs"
+    base.mkdir()
+    for name in ("a", "b"):
+        p = base / name
+        p.mkdir()
+        (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+        (p / ".env").write_text("ENTORNO=produccion\n", encoding="utf-8")
+        (p / "scripts").mkdir()
+        (p / "scripts" / "backup.sh").write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
+        (p / "backups").mkdir()
+        (p / "backups" / "full_backup_midb_day1.tar.gz").write_text("x", encoding="utf-8")
+        (p / "addons-bundle.json").write_text("{}", encoding="utf-8")
+        (p / "addons").mkdir()
+        (p / "addons" / "repos.json").write_text("[]", encoding="utf-8")
+        (p / "config").mkdir()
+        (p / "config" / "odoo.conf").write_text("[x]\n", encoding="utf-8")
+    # proxy no debe entrar
+    (base / "proxy").mkdir()
+    (base / "proxy" / "docker-compose.yml").write_text("x", encoding="utf-8")
+    monkeypatch.setenv("OMC_PROJECTS", str(base))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    # stub subprocess: psql lista una BD, backup ok, stop/start ok
+    import subprocess as _sp
+    def _fake(cmd, **k):
+        if "psql" in cmd:
+            return SimpleNamespace(returncode=0, stdout="midb\n")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    monkeypatch.setattr(_sp, "run", _fake)
+    # para todo: debe generar paquete con a y b
+    run_migrar_vps(SimpleNamespace(proyecto=None, todo=True, consistente=False))
+    outs = list(base.glob("migrar_*.tar.gz"))
+    assert len(outs) == 1
+    with tarfile.open(outs[0]) as tf:
+        names = tf.getnames()
+        assert any("a/full_backup" in n for n in names)
+        assert any("b/full_backup" in n for n in names)
+        assert not any("proxy" in n for n in names)
+        assert "MANIFEST.json" in names
+    capsys.readouterr()
+
+
 def test_list_json_valido(monkeypatch, tmp_path, capsys):
     import json as _json
     from omc.flows import run_list

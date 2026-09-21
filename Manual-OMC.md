@@ -6,9 +6,9 @@
 > `omc` (paquete `pip install odoo-manager-compose`) — Odoo Manager Compose: crea, opera y migra
 > instancias Odoo con docker-compose. Versiones Odoo 17 / 18 / 19, entornos desarrollo / producción.
 >
-> **Uso diario: solo `omc`, sin argumentos.** Se abre el menú (opciones 1-11, `0` para salir)
+> **Uso diario: solo `omc`, sin argumentos.** Se abre el menú (opciones 1-12, `0` para salir)
 > y todo se elige ahí: crear, descargar módulos, localizar, nginx, rclone, monitor, GitHub,
-> backup, restore, migrar. Al terminar cada acción vuelve al menú.
+> backup, restore, migrar, proxy, migrar a otro VPS. Al terminar cada acción vuelve al menú.
 > Los subcomandos directos (`omc crear --flags`, `omc addons ...`, etc.) existen como
 > **atajos avanzados** (scripts, VPS sin tty); este manual los marca como tales.
 
@@ -123,6 +123,7 @@ omc     # sin flags abre el menú:
 #   9) Restaurar BD [prod] (guiado: local/Drive, doble confirmación)
 #  10) Migrar proyecto a nueva versión Odoo (OCA: chequeo módulos + openupgrade)
 #  11) Proxy multinstancia (nginx compartido por subdominio)
+#  12) Migrar instancia a otro VPS (paquete completo)
 #   0) Salir
 # Opción 1 pide: 1) Nombre  2) Entorno  3) Versión  4) Puertos (validados)
 # 5) Passwords  6) ¿Desplegar? Al terminar vuelve al menú: los módulos NO se
