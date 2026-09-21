@@ -627,6 +627,27 @@ Lo propio (`addons/custom/`, tu código) **no** va en el json: se copia por git 
 Si la instancia es AR, aplicar opción 3 (localización) en la nueva también
 (`localizacion.json` + Dockerfile + parámetros no viajan en el bundle).
 
+### 9.5 Migrar instancia a otro VPS (paquete completo)
+
+Un solo comando para copiar una instancia (código + datos) a otro host, sin tocar
+volúmenes nombrados. Es la **opción 12 del menú**. Avanzado sin menú:
+
+```bash
+omc migrar-vps                          # un proyecto (elige del menú)
+omc migrar-vps --proyecto /opt/tienda   # ese proyecto
+omc migrar-vps --todo                   # todos los prod del host (proxy excluido)
+omc migrar-vps --todo --consistente     # para db también (corte total, más consistente)
+```
+
+Qué hace: `stop odoo` (o `stop db` si `--consistente`), lista BDs vía `psql`,
+actualiza `addons-bundle.json`, corre `backup.sh` por BD, `start odoo`,
+empaqueta `migrar_<host>_<ts>.tar.gz` en `$OMC_PROJECTS` con `full_backup_*` +
+`addons-bundle.json` + `.env` + `repos.json` + `odoo.conf` + `MANIFEST.json`
+(host/fecha/sha de cada tar). Solo `prod` con `scripts/backup.sh`; `proxy` nunca entra.
+
+Restaurar en destino: descomprimir en `$OMC_PROJECTS` y por cada proyecto
+`./scripts/restore.sh <bd> <tgz>` (o menú 9). Ver también §9.2.
+
 ---
 
 ## 10. Puertos y múltiples instancias
@@ -860,7 +881,7 @@ cd /opt/odoo-manager-compose && ./deploy-vps.sh
 
 Raíces custom: `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh` (datos y proyectos).
 
-Paso 3 — verificar (OMC sin subcomando abre el menú 1-11):
+Paso 3 — verificar (OMC sin subcomando abre el menú 1-12):
 
 ```bash
 omc --version && omc list

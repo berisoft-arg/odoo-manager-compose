@@ -59,7 +59,7 @@ cd /opt/odoo-manager-compose && ./deploy-vps.sh
 
 Raíces custom: `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh` (datos y proyectos).
 
-Paso 3 — verificar (OMC sin subcomando abre el menú 1-11):
+Paso 3 — verificar (OMC sin subcomando abre el menú 1-12):
 
 ```bash
 omc --version && omc list
