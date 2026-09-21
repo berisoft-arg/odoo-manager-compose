@@ -25,6 +25,9 @@ from .tui import (
     tenue,
     ok,
     err,
+    marco,
+    banner_omc,
+    seccion,
 )
 from .core import (
     render,
@@ -747,7 +750,7 @@ def _activar_https(salida: Path, dominio: str, email: str, staging: bool) -> boo
     nginx-https.conf.tpl y recarga. Devuelve True si quedó activo.
     """
     salida = Path(salida).resolve()
-    print(titulo("\n== Activando HTTPS =="))
+    print(seccion("\n== Activando HTTPS =="))
     r = subprocess.run(["docker", "compose", "up", "-d", "nginx"], cwd=str(salida))
     if r.returncode != 0:
         print("  ⚠ No pude levantar nginx. Hacelo a mano y reintenta.")
@@ -808,7 +811,7 @@ def _activar_https_proxy(salida: Path, proxy_root: Path, dominio: str,
     salida = Path(salida).resolve()
     proxy_root = Path(proxy_root).resolve()
     odoo_host = f"{salida.name.lower()}-odoo"
-    print(titulo("\n== Activando HTTPS en el proxy =="))
+    print(seccion("\n== Activando HTTPS en el proxy =="))
     live = proxy_root / "letsencrypt" / "live" / dominio / "fullchain.pem"
     if live.exists() and not staging:
         print(f"  Cert válido existente para {dominio}: se conserva (sin re-emitir).")
@@ -1384,7 +1387,7 @@ def run_deps(args):
             n = len(mismo_repo) + len(total)
             print("TODO_RESUELTO" if n == 0 else f"PENDIENTES:{n}")
             return
-        print(titulo("\n== Dependencias entre módulos =="))
+        print(seccion("\n== Dependencias entre módulos =="))
         foco = {
             x.strip()
             for x in (getattr(args, "enfocar", "") or "").split(",")
@@ -1565,7 +1568,7 @@ def run_deps_simple(proyecto, enfocar=None):
     proyecto = Path(proyecto)
     reporte, mismo_repo, total = analizar_depends(proyecto)
     foco = set(enfocar or [])
-    print(titulo("\n== Dependencias entre módulos =="))
+    print(seccion("\n== Dependencias entre módulos =="))
     for mod in sorted(reporte):
         if foco and mod not in foco:
             continue
@@ -1885,7 +1888,7 @@ def run_sync(args):
     )
     nuevos = sorted(_mods_de(_ahora_repos) - _mods_de(antes.get("addons/repos.json")))
     nuevos_nombres = sorted({x.rsplit("/", 1)[-1] for x in nuevos})
-    print(titulo("\n== Dependencias =="), flush=True)
+    print(seccion("\n== Dependencias =="), flush=True)
     from types import SimpleNamespace
 
     run_check_deps(SimpleNamespace(proyecto=str(proyecto), json_out=False))
@@ -1924,7 +1927,7 @@ def run_sync(args):
         )
     )
     # 2) re-escanear externas con lo nuevo
-    print(titulo("\n== Re-verificando dependencias externas con lo nuevo =="), flush=True)
+    print(seccion("\n== Re-verificando dependencias externas con lo nuevo =="), flush=True)
     run_check_deps(SimpleNamespace(proyecto=str(proyecto), json_out=False))
     # 3) Dockerfile solo si hay requirements
     if req.exists() and req.read_text().strip():
@@ -2255,12 +2258,15 @@ def menu_principal() -> str:
         ("proxy", "Proxy multinstancia (nginx compartido por subdominio)"),
         ("salir", "Salir"),
     ]
-    print(titulo(f"=== Odoo Manager Compose {PKG_VERSION} ==="))
-    print(tenue("¿Qué quiere hacer?  (Tip: URL y token del monitor en la opción 6)"))
+    print(banner_omc(PKG_VERSION))
     labels = [v for _k, v in acciones if _k != "salir"]
-    for i, lab in enumerate(labels, 1):
-        print(numero(f"  {i})") + f" {lab}")
-    print(tenue("  0) Salir"))
+    print(marco(
+        "¿Qué quiere hacer?",
+        [tenue("(Tip: URL y token del monitor en la opción 6)")] +
+        [f"  {numero(f'{i})')} {lab}" for i, lab in enumerate(labels, 1)] +
+        [tenue("  0) Salir")],
+        pie="0 sale · Enter = default",
+    ))
     r = ask_texto(f"Elige [0-{len(labels)}]", "1")
     if r == "0":
         return "salir"

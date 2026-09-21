@@ -17,7 +17,10 @@ _VERDE = "32"
 _AMARILLO = "33"
 _MAGENTA = "35"
 _CIAN = "36"
+_BLANCO = "37"
+_FONDO_AZUL = "44"
 _FIN = "0"
+_ANCHO_BARRA = 60
 
 
 def usa_color() -> bool:
@@ -67,6 +70,71 @@ def warn(texto: str) -> str:
 def err(texto: str) -> str:
     """Errores (✗)."""
     return c(texto, _ROJO)
+
+
+def separador() -> str:
+    """Línea divisoria estilo installer (tenue con color, invisible sin él)."""
+    return c("=" * _ANCHO_BARRA, _TENUE)
+
+
+def seccion(texto: str) -> str:
+    """Encabezado de sección: barra + título (reemplaza los '== ... ==')."""
+    return f"{separador()}\n{titulo(texto)}"
+
+
+def _ancho_visible(texto: str) -> int:
+    """Ancho sin contar códigos ANSI (asume caracteres de ancho 1)."""
+    import re
+    return len(re.sub(r"\033\[[0-9;]*m", "", texto))
+
+
+def marco(titulo_txt: str, contenido: list, pie: str = None) -> str:
+    """Caja estilo installer sobre el scroll (no limpia pantalla).
+
+    Sin color: líneas planas, byte-idénticas al formato histórico.
+    """
+    if not usa_color():
+        partes = [titulo_txt, *contenido]
+        if pie is not None:
+            partes.append(pie)
+        return "\n".join(partes)
+    ancho = max([_ancho_visible(titulo_txt)] +
+                [_ancho_visible(t) for t in contenido] +
+                [_ancho_visible(pie or "")]) + 4
+    borde = c("┌" + "─" * ancho + "┐", _TENUE)
+    base = c("└" + "─" * ancho + "┘", _TENUE)
+    li = c("│", _TENUE)
+    ld = c("│", _TENUE)
+
+    def _fila(texto: str) -> str:
+        rel = _ancho_visible(texto)
+        return f"{li} {texto}{' ' * max(0, ancho - rel - 2)}{ld}"
+
+    filas = [_fila(c(f" {titulo_txt} ", _NEGRITA, _BLANCO, _FONDO_AZUL))]
+    filas += [_fila(t) for t in contenido]
+    if pie is not None:
+        filas.append(_fila(tenue(pie)))
+    return "\n".join([borde] + filas + [base])
+
+
+def banner_omc(version: str) -> str:
+    """Banner de arranque estilo generador (arte ASCII + nombre + versión).
+
+    Sin color: una sola línea, igual que siempre.
+    """
+    if not usa_color():
+        return f"=== Odoo Manager Compose {version} ==="
+    arte = [
+        " ██████╗ ███╗   ███╗ ██████╗",
+        " ██╔══██╗████╗ ████║██╔════╝",
+        " ██║  ██║██╔████╔██║██║     ",
+        " ██║  ██║██║╚██╔╝██║██║     ",
+        " ╚██████╔╝██║ ╚═╝ ██║╚██████╗",
+        "  ╚═════╝ ╚═╝     ╚═╝ ╚═════╝",
+    ]
+    lineas = [c(l, _NEGRITA, _CIAN) for l in arte]
+    lineas.append(titulo(f"=== Odoo Manager Compose {version} ==="))
+    return "\n".join(lineas)
 
 
 def es_interactivo() -> bool:

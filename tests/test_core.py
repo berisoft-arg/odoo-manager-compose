@@ -214,3 +214,26 @@ def test_menu_sin_color_fuera_de_tty(monkeypatch, capsys, tmp_path):
     out = capsys.readouterr().out
     assert "\033[" not in out
     assert "=== Odoo Manager Compose" in out and " 11)" in out
+
+
+def test_banner_marco_seccion_planos_sin_tty(monkeypatch):
+    from omc import tui
+    monkeypatch.setattr("sys.stdout.isatty", lambda: False)
+    assert tui.banner_omc("9.9.9") == "=== Odoo Manager Compose 9.9.9 ==="
+    assert tui.marco("T", ["a", "b"], pie="P") == "T\na\nb\nP"
+    assert tui.marco("T", ["a"]) == "T\na"
+    assert tui.separador() == "=" * 60
+    assert tui.seccion("== X ==") == "=" * 60 + "\n== X =="
+
+
+def test_marco_dibuja_caja_con_tty(monkeypatch):
+    from omc import tui
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    out = tui.marco("Título", ["  1) Uno"], pie="pie")
+    assert "┌" in out and "┐" in out and "└" in out and "┘" in out
+    assert "│" in out and "  1)" in out and "Título" in out and "pie" in out
+    b = tui.banner_omc("1.0.0")
+    assert "=== Odoo Manager Compose 1.0.0 ===" in b
+    assert b.count("\n") >= 6  # arte + título
