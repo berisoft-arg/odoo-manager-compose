@@ -1589,12 +1589,12 @@ def solo_install(proyecto, ver=None, ofrecer_aplicar=True):
                 )
             )
             return True
-    if es_interactivo() and ask_si_no(
+    if ofrecer_aplicar and es_interactivo() and ask_si_no(
         "¿Reiniciar Odoo ahora? (docker compose restart odoo)", default_no=False
     ):
         subprocess.run(["docker", "compose", "restart", "odoo"], cwd=str(proyecto))
         print("  ✓ Odoo reiniciado. Actualiza la lista de aplicaciones en la UI.")
-    else:
+    elif ofrecer_aplicar:
         print("\nSigue con: omc addons sync  (deps + rebuild)")
     return True
 
@@ -1902,7 +1902,8 @@ def run_sync(args):
             "¿Descargar módulos nuevos?",
             default_no=True,
         ):
-            solo_install(proyecto)
+            if not solo_install(proyecto, ofrecer_aplicar=False):
+                return  # Nada elegido en puerta_instalacion: vuelta al menú sin ruido
         else:
             return  # no hay nada nuevo: vuelve al menú sin mostrar deps ni aplicar
     # Auto-export: fusiona el estado actual en addons-bundle.json (lo crea si
@@ -1940,14 +1941,14 @@ def run_sync(args):
             f"\nPara aplicar: cd {proyecto} && docker compose up -d --build && docker compose restart odoo"
         )
         return
-    det_nuevos = ", ".join(sorted(nuevos)) if nuevos else "nada nuevo"
+    det_nuevos = ", ".join(sorted(nuevos))
     # Config de módulos especiales antes de aplicar (ej queue_job -> odoo.conf)
     asegurar_queue_job_conf(proyecto, args)
     if args.yes or not sys.stdin.isatty():
         aplicar = True
     else:
         aplicar = ask_si_no(
-            f"Aplicar todo ({det_nuevos})? Dockerfile si hace falta, rebuild si hace falta, si no restart",
+            f"Aplicar cambios ({det_nuevos})?",
             default_no=False,
         )
     if not aplicar:

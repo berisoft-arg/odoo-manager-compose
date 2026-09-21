@@ -109,6 +109,91 @@ def test_run_sync_avisa_drift(monkeypatch, tmp_path, capsys):
     assert "omc addons pull" in out
 
 
+def test_run_sync_no_descargar_no_muestra_deps(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    import omc.flows as F
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text("[]", encoding="utf-8")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(F, "ask_si_no", lambda *a, **k: False)
+    monkeypatch.setattr(F, "solo_install", lambda *a, **k: (_ for _ in ()).throw(AssertionError("no debe llamarse")))
+    run_sync(SimpleNamespace(proyecto=str(p), bundle="", odoo="", branch="", yes=False, skip_install=False, no_deploy=False))
+    out = capsys.readouterr().out
+    assert "== Dependencias ==" not in out
+    assert "Aplicar" not in out
+
+
+def test_run_sync_nada_no_muestra_deps(monkeypatch, tmp_path, capsys):
+    import json as _json
+    import subprocess as _sp
+    import omc.flows as F
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text("[]", encoding="utf-8")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    # ask_si_no "¿Descargar...?" -> True, pero solo_install devuelve False (Nada)
+    calls = []
+    def _ask(prompt, **k):
+        calls.append(prompt)
+        if "Descargar" in prompt:
+            return True
+        return False
+    def _fake_solo(*a, **k):
+        print("\nSin cambios, no hay nada que aplicar.")
+        return False
+    monkeypatch.setattr(F, "ask_si_no", _ask)
+    monkeypatch.setattr(F, "solo_install", _fake_solo)
+    monkeypatch.setattr(F, "actualizar_bundle_desde_estado", lambda *a, **k: False)
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: SimpleNamespace(returncode=0))
+    run_sync(SimpleNamespace(proyecto=str(p), bundle="", odoo="", branch="", yes=False, skip_install=False, no_deploy=False))
+    out = capsys.readouterr().out
+    assert "Sin cambios" in out
+    assert "== Dependencias ==" not in out
+    assert "Aplicar cambios" not in out
+
+
+def test_run_sync_con_novedad_una_sola_pregunta(monkeypatch, tmp_path, capsys):
+    import json as _json
+    import subprocess as _sp
+    import omc.flows as F
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text("[]", encoding="utf-8")
+    # Simular que solo_install cambió algo y nuevo repo aparece
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    def _solo(*a, **k):
+        (p / "addons" / "repos.json").write_text(_json.dumps([{"path": "addons/oca/a", "modules": ["m1"]}] ), encoding="utf-8")
+        (p / "addons" / "oca" / "a" / "m1").mkdir(parents=True, exist_ok=True)
+        return True
+    monkeypatch.setattr(F, "solo_install", _solo)
+    preguntas = []
+    orig_ask = F.ask_si_no
+    def _ask2(prompt, **k):
+        preguntas.append(prompt)
+        if "Descargar" in prompt:
+            return True
+        if "Aplicar cambios" in prompt:
+            return True
+        return orig_ask(prompt, **k)
+    monkeypatch.setattr(F, "ask_si_no", _ask2)
+    monkeypatch.setattr(F, "run_check_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_deps_simple", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "actualizar_bundle_desde_estado", lambda *a, **k: False)
+    monkeypatch.setattr(F, "asegurar_queue_job_conf", lambda *a, **k: None)
+    monkeypatch.setattr(F, "ensure_dockerfile_sync", lambda *a: False)
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: SimpleNamespace(returncode=0))
+    run_sync(SimpleNamespace(proyecto=str(p), bundle="", odoo="", branch="", yes=False, skip_install=False, no_deploy=False))
+    # Solo una pregunta de aplicar, no dos
+    aplicar = [q for q in preguntas if "Aplicar" in q]
+    assert len(aplicar) == 1
+    assert "cambios" in aplicar[0].lower()
+
+
 def _proj_json(tmp_path, nombre="tienda", env_extra=""):
     base = tmp_path / "projs"
     base.mkdir(exist_ok=True)
