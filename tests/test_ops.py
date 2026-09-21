@@ -220,7 +220,11 @@ def test_menu_principal_muestra_tip_monitor(monkeypatch, capsys):
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
     monkeypatch.setattr("builtins.input", lambda *a, **k: "0")
     assert menu_principal() == "salir"
-    assert "opción 6" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    # Tip removido por diseño
+    assert "Tip:" not in out
+    assert "opción 6" not in out
+    assert " 11)" in out
 
 
 def test_menu_opcion_11_es_proxy(monkeypatch, capsys):

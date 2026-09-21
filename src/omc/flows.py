@@ -2261,12 +2261,25 @@ def menu_principal() -> str:
     ]
     print(banner_omc(PKG_VERSION))
     labels = [v for _k, v in acciones if _k != "salir"]
+    # Opciones navegables: 1..11 + 0 Salir (12 items, 0 navegable)
+    nav_items = [f"{i}) {lab}" for i, lab in enumerate(labels, 1)] + ["0) Salir"]
+    # Intento con flechas si hay tty real
+    try:
+        from .tui import elegir_interactivo
+        sel = elegir_interactivo(nav_items, titulo_txt="¿Qué quiere hacer?",
+                                 pie="↑/↓ + Enter · número + Enter · ESC sale")
+        if sel is not None:
+            if sel == len(nav_items) - 1:
+                return "salir"
+            return acciones[sel][0]
+    except Exception:  # noqa: BLE001
+        pass
+    # Fallback clásico numérico
     print(marco(
         "¿Qué quiere hacer?",
-        [tenue("(Tip: URL y token del monitor en la opción 6)")] +
         [f"  {numero(f'{i})')} {texto_menu(lab)}" for i, lab in enumerate(labels, 1)] +
         [tenue("  0) Salir")],
-        pie="0 sale · Enter = default",
+        pie="↑/↓ + Enter · número + Enter · ESC sale",
     ))
     r = ask_texto(f"Elige [0-{len(labels)}]", "1")
     if r == "0":

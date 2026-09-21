@@ -145,6 +145,155 @@ def banner_omc(version: str) -> str:
     return "\n" + "\n".join(lineas)
 
 
+def elegir_interactivo(opciones: list, titulo_txt: str = "¿Qué quiere hacer?",
+                       pie: str = None) -> int | None:
+    """Menú navegable con flechas ↑/↓ + Enter. Retorna índice o None si sin tty.
+
+    - Gate: sin tty real (stdin o stdout no es tty, NO_COLOR, TERM=dumb) → None (fallback numérico).
+    - Con tty: modo raw cbreak, oculta cursor, pinta caja con resaltado (fondo azul),
+      lee Esc-secuencias 3 bytes para flechas, Enter confirma, dígito mueve selección,
+      ESC/q sale (último = Salir). Restaura terminal siempre (finally).
+    - Sin deps extra (solo termios/tty/select, stdlib). En Windows retorna None.
+    """
+    # Gate: sin tty → fallback
+    if os.environ.get("NO_COLOR") is not None:
+        return None
+    if os.environ.get("TERM", "") == "dumb":
+        return None
+    try:
+        if not sys.stdin.isatty() or not sys.stdout.isatty():
+            return None
+    except Exception:  # noqa: BLE001
+        return None
+    try:
+        import select
+        import termios
+        import tty
+    except Exception:  # noqa: BLE001  (Windows)
+        return None
+
+    # Construir contenido base para medir alto (sin resaltado aún)
+    # El marco real se renderiza dentro del loop con resaltado
+    n = len(opciones)
+    if n == 0:
+        return None
+    idx = 0  # 0..n-1, n incluye "0) Salir" como último si se pasa así; el llamador decide
+    # Para distinguir, el llamador pasa lista completa con Salir incluido
+    fd = sys.stdin.fileno()
+    try:
+        old = termios.tcgetattr(fd)
+    except Exception:  # noqa: BLE001
+        return None
+    # Ocultar cursor
+    try:
+        sys.stdout.write("\x1b[?25l")
+        sys.stdout.flush()
+    except Exception:  # noqa: BLE001
+        pass
+
+    def _pinta(sel: int):
+        # Renderiza caja con item sel resaltado (fondo azul)
+        lineas = []
+        for i, lab in enumerate(opciones):
+            # lab ya viene formateado como "  1) Texto"; resaltamos toda la línea
+            if i == sel:
+                # Fondo azul + blanco negrita para la línea completa
+                lineas.append(c(f"  {lab}", _NEGRITA, _BLANCO, _FONDO_AZUL))
+            else:
+                # Mantener formato original (numero azul, texto blanco)
+                # Re-parsear "  1) Texto" para no perder colores previos si los trae
+                # Si lab trae ANSI, respetarlo; si no, pintarlo normal
+                if lab.strip().startswith("0)"):
+                    lineas.append(tenue(f"  {lab.strip()}"))
+                else:
+                    # Separar número y resto si viene como "  1) Texto"
+                    # Fallback simple: pintar como texto_menu si no tiene ANSI
+                    if "\x1b[" not in lab:
+                        # Intentar separar "1) Texto"
+                        if ")" in lab:
+                            pref = lab.split(")")[0] + ")"
+                            rest = lab.split(")", 1)[1]
+                        else:
+                            pref = lab
+                            rest = ""
+                        lineas.append(f"  {numero(pref)} {texto_menu(rest)}")
+                    else:
+                        lineas.append(f"  {lab}")
+        # Usar marco interno con contenido ya coloreado
+        # marco() con usa_color()=True añadirá bordes grises y título azul
+        out = marco(titulo_txt, lineas, pie=pie)
+        return out
+
+    # Pintar inicialmente
+    # Guardar altura para repintar in-place
+    altura = 0
+    try:
+        tty.setcbreak(fd)
+        # Primer pintado fuera del loop para calcular altura
+        out = _pinta(idx)
+        sys.stdout.write(out + "\n")
+        sys.stdout.flush()
+        altura = out.count("\n") + 1
+        # También banner ya está arriba; no lo repintamos
+        while True:
+            # Esperar tecla sin bloquear 100% CPU (select)
+            r, _, _ = select.select([sys.stdin], [], [], 0.2)
+            if not r:
+                continue
+            ch = os.read(fd, 3)
+            if not ch:
+                continue
+            # Flecha arriba: \x1b[A  o \x1bOA
+            if ch in (b"\x1b[A", b"\x1bOA"):
+                idx = (idx - 1) % n
+            elif ch in (b"\x1b[B", b"\x1bOB"):
+                idx = (idx + 1) % n
+            elif ch in (b"\r", b"\n"):
+                return idx
+            elif ch == b"\x1b":  # ESC solo → salir
+                return n - 1 if opciones[-1].strip().startswith("0)") or "Salir" in opciones[-1] else n - 1
+            elif ch in (b"q", b"Q"):
+                return n - 1
+            elif len(ch) == 1 and 48 <= ch[0] <= 57:  # dígito 0-9
+                try:
+                    d = int(ch.decode())
+                except Exception:  # noqa: BLE001
+                    continue
+                # Mapeo: 1..n-1 → idx, 0 → último (Salir)
+                if d == 0:
+                    idx = n - 1
+                elif 1 <= d <= n - 1:
+                    idx = d - 1
+                else:
+                    continue
+            else:
+                continue
+            # Repintar in-place: subir cursor altura líneas + banner no incluido
+            # Mover arriba y limpiar desde cursor
+            try:
+                sys.stdout.write(f"\x1b[{altura}A")
+                sys.stdout.write("\x1b[J")
+                out = _pinta(idx)
+                sys.stdout.write(out + "\n")
+                sys.stdout.flush()
+                altura = out.count("\n") + 1
+            except Exception:  # noqa: BLE001
+                pass
+    except KeyboardInterrupt:
+        return None
+    finally:
+        try:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        except Exception:  # noqa: BLE001
+            pass
+        try:
+            sys.stdout.write("\x1b[?25h")
+            sys.stdout.write("\n")
+            sys.stdout.flush()
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def es_interactivo() -> bool:
     return sys.stdin.isatty()
 
