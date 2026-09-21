@@ -698,9 +698,8 @@ git por apt, `odoo.conf` sin `:ro`, sin `logfile` en 19): ver [CHANGELOG.md](CHA
 ## 13. Dónde vive cada cosa (estándar VPS)
 
 ```text
-/opt/odoo-manager-compose   # código OMC (repo; actualizar: git pull)
-/root/.venv/omc             # entorno virtual (lo crea el deploy; en home, no se mueve)
-/root/.local/bin/omc        # comando (symlink; requiere PATH)
+pipx venv (~/.local/pipx/venvs/odoo-manager-compose)  # código OMC (con git: /opt/odoo-manager-compose)
+~/.local/bin/omc                                      # comando
 /root/.config/systemd/user/ # servicio omc-monitor (con el token, permiso 600)
 /opt/omc                    # datos OMC: OMC_HOME (catálogos editables, estado)
 /opt/<nombre>               # proyectos: OMC_PROJECTS (ej. /opt/mi-proyecto)
@@ -776,7 +775,14 @@ omc-monitor --host 0.0.0.0 --token MI_TOKEN_LARGO  # nunca sin token ni sin TLS
 
 ## 15. Instalación (venv, sin Docker)
 
-**Desde el repo (desarrollo):**
+```bash
+pipx install odoo-manager-compose
+# o
+pip install odoo-manager-compose --break-system-packages
+omc --version  # abre el menú 1-12
+```
+
+Para desarrollo:
 
 ```bash
 pip install -e .            # editable: los cambios en src/ aplican al acto
@@ -802,12 +808,11 @@ omc update <modulo> [--db <bd>]           # -u en contenedor efímero + restart
 omc test <modulo> [--db <bd>]             # --test-enable en contenedor efímero
 ```
 
-**En venv aislado (recomendado fuera de desarrollo):**
+En venv aislado manual:
 
 ```bash
 python3 -m venv ~/.venv/omc
-~/.venv/omc/bin/pip install -r requirements.txt   # runtime: flask + gunicorn
-~/.venv/omc/bin/pip install --no-deps .           # registra el paquete
+~/.venv/omc/bin/pip install odoo-manager-compose
 ln -sf ~/.venv/omc/bin/omc ~/.local/bin/omc
 ln -sf ~/.venv/omc/bin/omc-monitor ~/.local/bin/omc-monitor
 ```
@@ -815,12 +820,9 @@ ln -sf ~/.venv/omc/bin/omc-monitor ~/.local/bin/omc-monitor
 Los paquetes de migración OCA (`odoo-module-migrator`, `openupgradelib`) no se
 preinstalan: `omc migrar` ofrece bajarlos con pip si faltan (con `--yes`, solos).
 
-**Distribución:** `pip install odoo-manager-compose` (cuando se publique), clon + venv,
-o directo sin clonar: `pip install "git+https://github.com/berisoft-arg/odoo-manager-compose.git"`.
 Sin imagen Docker: `omc` corre nativo y controla el Docker del host para los proyectos.
 
-**Actualizar:** `cd ~/odoo-manager-compose && git pull && ./deploy-vps.sh`
-(reutiliza token y raíces; ver §17). **Licencia:** AGPL-3.0 (`LICENSE` en el repo).
+**Actualizar:** `pipx upgrade odoo-manager-compose` o `pip install --upgrade odoo-manager-compose`. **Licencia:** AGPL-3.0 (`LICENSE` en el repo).
 
 ---
 
@@ -859,43 +861,18 @@ correría con los binarios origen y no migraría nada) y `scripts/migrate_db.sh`
 
 ## 17. VPS con deploy-vps.sh
 
-**Instalación express en un VPS nuevo (tres pasos, un bloque por pegada):**
-
-Paso 1 — base:
+**Instalación express en un VPS nuevo:**
 
 ```bash
-sudo apt update && sudo apt install -y python3 python3-venv git curl
+pipx install odoo-manager-compose
+# o
+pip install odoo-manager-compose --break-system-packages
+omc --version  # abre el menú 1-12
 ```
 
-Docker + compose (solo origen oficial): si ya responden, el deploy los respeta
-tal cual; si faltan, el deploy instala el repo oficial solo. Nunca `docker.io`
-junto a Docker oficial (chocan `containerd`/`containerd.io`). Tras el deploy:
-re-login (o `newgrp docker`) por el grupo docker.
+Para VPS con monitor systemd, luego: `omc` se encarga de `/opt/omc` y `/opt` (sudo único, uso diario sin sudo).
 
-Paso 2 — omc (el deploy prepara /opt/omc + /opt con sudo único; uso diario sin sudo):
-
-```bash
-git clone https://github.com/berisoft-arg/odoo-manager-compose.git /opt/odoo-manager-compose
-cd /opt/odoo-manager-compose && ./deploy-vps.sh
-```
-
-Raíces custom: `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh` (datos y proyectos).
-
-Paso 3 — verificar (OMC sin subcomando abre el menú 1-12):
-
-```bash
-omc --version && omc list
-```
-
-Instalación nativa (venv aislado + monitor como servicio, sin Docker para `omc`):
-
-```bash
-git clone <tu-repo> /opt/odoo-manager-compose
-cd /opt/odoo-manager-compose
-./deploy-vps.sh   # defaults: datos /opt/omc, proyectos /opt/<nombre>
-# Raíces custom: OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh
-# (~/omc-data y ~/odoo-manager-compose existentes se respetan: migración)
-```
+Raíces custom: `OMC_HOME=... OMC_PROJECTS=... pipx install odoo-manager-compose`.
 
 El script es idempotente: verifica prerrequisitos (Python ≥3.10, `python3-venv`, git,
 docker + plugin compose, systemd de usuario), deja escribibles `/opt/omc` (datos)

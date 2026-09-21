@@ -37,36 +37,14 @@ Python 3.10+, Git, Docker con plugin compose. Para repos privados en https:
 
 ## Instalación
 
-**Instalación express en un VPS nuevo (tres pasos, un bloque por pegada):**
-
-Paso 1 — base:
-
 ```bash
-sudo apt update && sudo apt install -y python3 python3-venv git curl
+pipx install odoo-manager-compose
+# o
+pip install odoo-manager-compose --break-system-packages
+omc --version  # abre el menú 1-12
 ```
 
-Docker + compose (solo origen oficial): si ya responden, el deploy los respeta
-tal cual; si faltan, el deploy instala el repo oficial solo. Nunca `docker.io`
-junto a Docker oficial (chocan `containerd`/`containerd.io`). Tras el deploy:
-re-login (o `newgrp docker`) por el grupo docker.
-
-Paso 2 — omc (el deploy prepara /opt/omc + /opt con sudo único; uso diario sin sudo):
-
-```bash
-git clone https://github.com/berisoft-arg/odoo-manager-compose.git /opt/odoo-manager-compose
-cd /opt/odoo-manager-compose && ./deploy-vps.sh
-```
-
-Raíces custom: `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh` (datos y proyectos).
-
-Paso 3 — verificar (OMC sin subcomando abre el menú 1-12):
-
-```bash
-omc --version && omc list
-# monitor sin login: el deploy activa linger solo (si avisa: sudo loginctl enable-linger $USER)
-```
-
-Detalles, venv manual y otras vías: ver [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker).
+> Manual completo: [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker) y [§17 VPS](Manual-OMC.md#17-vps-con-deploy-vpssh).
 
 ## Uso rápido: el menú básico (1-12, 0 sale)
 
@@ -102,9 +80,8 @@ CHANGELOG.md         # historial
 ### Dónde vive cada cosa (estándar VPS)
 
 ```text
-/opt/odoo-manager-compose   # código OMC (repo; actualizar: git pull)
-~/.venv/omc                 # entorno virtual (lo crea el deploy; en home, no se mueve)
-~/.local/bin/omc            # comando (symlink; requiere PATH)
+pipx venv (~/.local/pipx/venvs/odoo-manager-compose)  # código OMC (con git: /opt/odoo-manager-compose)
+~/.local/bin/omc                                      # comando
 ~/.config/systemd/user/     # servicio omc-monitor (con el token, permiso 600)
 /opt/omc                    # datos OMC: OMC_HOME (catálogos editables, estado)
 /opt/<nombre>               # proyectos: OMC_PROJECTS (ej. /opt/mi-proyecto)
