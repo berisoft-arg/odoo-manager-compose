@@ -112,6 +112,7 @@ if((d.stats||[]).length){h+="<h4>Contenedores CPU/RAM</h4><table><tr><th>Nombre<
 if(d.disco&&d.disco.total){const pu=Math.round(100*d.disco.usado/d.disco.total);h+=`<h4>Disco: ${hum(d.disco.usado)}/${hum(d.disco.total)} (backups: ${hum(d.backups_bytes)})</h4>`+bar(pu)}
 if(d.backup&&d.backup.carpeta){const f=new Date(d.backup.fecha*1000).toLocaleString();h+=`<p>Último backup: <b>${d.backup.carpeta}</b> ${f} · ${hum(d.backup.bytes)} · ${d.backup.ok?"✓ db.dump":"⚠ sin db.dump"}</p>`}else h+="<p>Sin backups locales.</p>";
 if(d.ssl&&d.ssl.dias!=null)h+=`<p>SSL ${d.ssl.dominio}: <b>${d.ssl.dias} días</b> ${d.ssl.dias<15?"⚠ renueva pronto":""}</p>`;
+if(d.afip&&d.afip.length){h+="<h4>AFIP WSAA (ARCA)</h4><table><tr><th>BD</th><th>Certificado</th><th>Vencimiento</th></tr>";d.afip.forEach(a=>{let col=a.level=="vencido"?"#c0392b":a.level=="critical"?"#e74c3c":a.level=="warn"?"#d9a021":"var(--mut)";let icon=a.level=="vencido"?"⛔ vencido":a.level=="critical"?"🔴 renueva urgente":a.level=="warn"?"⚠ renueva pronto":"✓";h+=`<tr><td>${a.bd}</td><td>${a.alias} (${a.cuit}) <span class="mut">${a.type}</span></td><td style="color:${col}"><b>${a.dias} días</b> ${icon} <span class="mut">${a.notAfter||""}</span></td></tr>`});h+="</table>"}
 if(d.http_5xx!=null)h+=`<p>Errores 5xx nginx (últimos 500 logs): <b>${d.http_5xx}</b></p>`;
 document.getElementById("metOut").innerHTML=h;ahora("updM")})}
 function autoMet(){clearInterval(timerM);if(document.getElementById("autoM").checked)timerM=setInterval(verMet,20000)}

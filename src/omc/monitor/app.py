@@ -366,6 +366,82 @@ def api_metricas(nombre):
         except Exception:  # noqa: BLE001
             pass
 
+    # --- AFIP WSAA (ARCA) por BD ---
+    m["afip"] = []
+    try:
+        bds = (m.get("pg") or {}).get("bases") or []
+        for bd in bds:
+            try:
+                r = subprocess.run(
+                    ["docker", "compose", "exec", "-T", "db",
+                     "psql", "-U", "odoo", "-d", bd,
+                     "-At", "-c",
+                     "SELECT crt FROM afipws_certificate WHERE state='confirmed' ORDER BY id DESC LIMIT 1;"],
+                    cwd=str(d), text=True, stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL, timeout=15)
+                crt = (r.stdout or "").strip()
+                if r.returncode != 0 or not crt or "BEGIN CERTIFICATE" not in crt:
+                    continue
+                # alias
+                ra = subprocess.run(
+                    ["docker", "compose", "exec", "-T", "db",
+                     "psql", "-U", "odoo", "-d", bd,
+                     "-At", "-c",
+                     "SELECT a.common_name || E'\t' || a.company_cuit || E'\t' || a.type "
+                     "FROM afipws_certificate c JOIN afipws_certificate_alias a ON a.id=c.alias_id "
+                     "WHERE c.state='confirmed' ORDER BY c.id DESC LIMIT 1;"],
+                    cwd=str(d), text=True, stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL, timeout=15)
+                alias = cuit = typ = ""
+                if ra.returncode == 0 and ra.stdout:
+                    parts = ra.stdout.strip().split("\t")
+                    if len(parts) >= 3:
+                        alias, cuit, typ = parts[0], parts[1], parts[2]
+                import tempfile as _tf
+                with _tf.NamedTemporaryFile(mode="w", suffix=".pem", delete=False) as tf:
+                    tf.write(crt)
+                    tf.flush()
+                    tmp = tf.name
+                try:
+                    rr = subprocess.run(
+                        ["openssl", "x509", "-enddate", "-noout", "-in", tmp],
+                        text=True, stdout=subprocess.PIPE,
+                        stderr=subprocess.DEVNULL, timeout=15)
+                    import datetime as _dt2
+                    dias = None
+                    level = "ok"
+                    not_after = ""
+                    for line in (rr.stdout or "").splitlines():
+                        if line.startswith("notAfter="):
+                            not_after = line[9:].strip()
+                            try:
+                                fin = _dt2.datetime.strptime(not_after, "%b %d %H:%M:%S %Y %Z")
+                                fin = fin.replace(tzinfo=_dt2.timezone.utc)
+                                dias = (fin - _dt2.datetime.now(_dt2.timezone.utc)).days
+                                if dias is not None:
+                                    if dias <= 0:
+                                        level = "vencido"
+                                    elif dias <= 7:
+                                        level = "critical"
+                                    elif dias <= 30:
+                                        level = "warn"
+                            except Exception:  # noqa: BLE001
+                                pass
+                    if dias is not None:
+                        m["afip"].append({"bd": bd, "alias": alias, "cuit": cuit,
+                                           "type": typ, "dias": dias,
+                                           "notAfter": not_after, "level": level})
+                finally:
+                    try:
+                        import os as _os2
+                        _os2.unlink(tmp)
+                    except Exception:  # noqa: BLE001
+                        pass
+            except Exception:  # noqa: BLE001
+                continue
+    except Exception:  # noqa: BLE001
+        pass
+
     # --- errores 5xx recientes en nginx (si existe) ---
     m["http_5xx"] = None
     try:

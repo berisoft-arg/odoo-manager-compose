@@ -268,6 +268,7 @@ m2crypto/SECLEVEL/cache + rebuild). Además genera `scripts/parametros_ar.sh`
 (idempotente: crea `ir.config_parameter` si no existen, hoy `report.url`
 → `http://localhost:8069` y `afip.ws.env.type` → `homologation`) y ofrece fijarlos si ya hay BD creada.
 Acordate de pasar `afip.ws.env.type` a `production` cuando factures de verdad.
+El monitor muestra el vencimiento del certificado WSAA por proyecto/BD (warn 30 días, critical 7 días).
 En la creación ya no se pregunta localización:
 ahí solo se crea el proyecto (los módulos van por opción 2/3 después).
 Avanzado sin menú: `--localizacion argentina-adhoc` o `argentina-codize`. Tu flujo manual queda horneado en el Dockerfile:
