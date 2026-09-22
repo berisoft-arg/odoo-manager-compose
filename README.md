@@ -18,8 +18,8 @@ Asistente interactivo + CLI + monitor web + migración OCA entre versiones.
 - **Localización Argentina**: bundle AdHoc (factura electrónica + IVA),
   `python3-m2crypto` por apt, `SECLEVEL=1`, cache de pyafipws.
 - **Monitor web** (`omc-monitor`): Flask solo-lectura del estado de instancias
-  (contenedores, cron, colas), tema claro/oscuro, token de acceso (URL y token
-  solo visibles en la opción 6 del menú).
+  (contenedores, cron, colas, disco, SSL, **AFIP WSAA por BD con alertas 30/7 días**),
+  tema claro/oscuro, token de acceso (URL y token solo visibles en la opción 6 del menú).
 - **Migración OCA** (`omc migrar`): etapa 1 código (`odoo-module-migrator`,
   clasifica migrado/sin-migrar/custom sin mutar el proyecto), etapa 2 BD
   (OpenUpgrade + `docker-compose.migrate.yml`), con backup previo siempre.

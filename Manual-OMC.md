@@ -268,7 +268,8 @@ m2crypto/SECLEVEL/cache + rebuild). Además genera `scripts/parametros_ar.sh`
 (idempotente: crea `ir.config_parameter` si no existen, hoy `report.url`
 → `http://localhost:8069` y `afip.ws.env.type` → `homologation`) y ofrece fijarlos si ya hay BD creada.
 Acordate de pasar `afip.ws.env.type` a `production` cuando factures de verdad.
-El monitor muestra el vencimiento del certificado WSAA por proyecto/BD (warn 30 días, critical 7 días).
+El monitor (opción 6, §14) muestra por BD el vencimiento del certificado WSAA
+(alias/CUIT/tipo → `notAfter`/`días`, niveles `ok`/`warn ≤30`/`critical ≤7`/`vencido` con color e ícono).
 En la creación ya no se pregunta localización:
 ahí solo se crea el proyecto (los módulos van por opción 2/3 después).
 Avanzado sin menú: `--localizacion argentina-adhoc` o `argentina-codize`. Tu flujo manual queda horneado en el Dockerfile:
@@ -753,7 +754,7 @@ omc-monitor --host 0.0.0.0 --token MI_TOKEN_LARGO  # nunca sin token ni sin TLS
 - **Métricas** por proyecto (auto 20s, todo solo-lectura): conexiones PG vs `max_connections`,
   lentas >5s, bloqueos, tamaño por BD + crecimiento ~24h (historial local), cron activos por BD,
   CPU/RAM por contenedor (`docker stats`), disco + backups, último backup (fecha/tamaño/db.dump),
-  días de SSL y 5xx recientes de nginx. La password de PG nunca sale del servidor.
+  días de SSL, **AFIP WSAA por BD** (alias/CUIT/tipo, `notAfter` y días restantes con `ok`/`warn ≤30`/`critical ≤7`/`vencido`) y 5xx recientes de nginx. La password de PG nunca sale del servidor.
 - A propósito sin crear/editar/borrar nada: mantiene el espíritu del asistente de terminal.
 
 ---
