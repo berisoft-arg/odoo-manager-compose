@@ -26,7 +26,7 @@
 10. [Puertos y múltiples instancias](#10-puertos-y-múltiples-instancias)
 11. [Docker útil](#11-docker-útil)
 12. [Solución de problemas](#12-solución-de-problemas)
-13. [Dónde vive cada cosa (estándar VPS)](#13-dónde-vive-cada-cosa-estándar-vps)
+13. [Dónde vive (estándar VPS)](#13-dónde-vive-estándar-vps)
 14. [Monitor web](#14-monitor-web-src-omc-monitor-app-py-flask-solo-lectura)
 15. [Instalación (venv, sin Docker)](#15-instalación-venv-sin-docker)
 16. [Migración entre versiones Odoo](#16-migración-entre-versiones-odoo-oca)
@@ -110,27 +110,12 @@ addons_path = /mnt/extra-addons/custom,/mnt/extra-addons,/mnt/extra-addons/adhoc
 ## 3. Inicio rápido (en tu máquina)
 
 ```bash
-cd ~/odoo-manager-compose
-omc     # sin flags abre el menú:
-#   1) Crear proyecto nuevo (docker-compose Odoo)
-#   2) Descargar módulos y aplicar (bundle/lista + deps + rebuild)
-#   3) Instalación dependencias Localización Argentina
-#   4) Configurar web nginx + certbot [prod]
-#   5) Configurar rclone / Google Drive [prod]
-#   6) Ver monitor web (muestra URL y token del servicio; si no hay, los pide)
-#   7) Configurar GitHub (token + org)
-#   8) Backup manual [prod]
-#   9) Restaurar BD [prod] (guiado: local/Drive, doble confirmación)
-#  10) Migrar proyecto a nueva versión Odoo (OCA: chequeo módulos + openupgrade)
-#  11) Proxy multinstancia (nginx compartido por subdominio)
-#  12) Migrar instancia a otro VPS (paquete completo)
-#   0) Salir
-# Opción 1 pide: 1) Nombre  2) Entorno  3) Versión  4) Puertos (validados)
-# 5) Passwords  6) ¿Desplegar? Al terminar vuelve al menú: los módulos NO se
-# descargan acá. Flujo habitual: 1 (crear) → 2 (descargar módulos con bundle o
-# lista, rama X.0 automática) → 3 (localización AR si la necesitas: deja
-# m2crypto/SECLEVEL + ofrece aplicar con Dockerfile + rebuild).
+omc     # sin flags abre el menú
 ```
+
+![Menú principal OMC — opciones 1-12 y 0 Salir](assets/images/menu.png)
+
+*Opción 1 pide: 1) Nombre  2) Entorno  3) Versión  4) Puertos (validados)  5) Passwords  6) ¿Desplegar? Al terminar vuelve al menú: los módulos NO se descargan acá. Flujo habitual: 1 (crear) → 2 (descargar módulos con bundle o lista, rama X.0 automática) → 3 (localización AR si la necesitas: deja m2crypto/SECLEVEL + ofrece aplicar con Dockerfile + rebuild).*
 
 Abrir `http://localhost:PUERTO` y ver logs con `docker compose logs -f odoo`.
 
@@ -695,7 +680,7 @@ git por apt, `odoo.conf` sin `:ro`, sin `logfile` en 19): ver [CHANGELOG.md](CHA
 
 ---
 
-## 13. Dónde vive cada cosa (estándar VPS)
+## 13. Dónde vive (estándar VPS)
 
 ```text
 pipx venv (~/.local/pipx/venvs/odoo-manager-compose)  # código OMC (con git: /opt/odoo-manager-compose)

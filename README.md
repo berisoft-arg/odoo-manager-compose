@@ -52,10 +52,9 @@ omc --version  # abre el menú 1-12
 omc                 # abre el menú
 ```
 
-1 crear proyecto · 2 descargar módulos · 3 localizar AR · 4 web nginx+TLS ·
-5 rclone/Drive · 6 monitor · 7 GitHub · 8 backup · 9 restore · 10 migrar OCA ·
-11 proxy multinstancia (nginx compartido por subdominio) · 12 migrar a otro VPS.
-Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup.
+![Menú principal OMC — opciones 1-12 y 0 Salir](assets/images/menu.png)
+
+*Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup.*
 
 Menú avanzado (subcomandos directos como `omc crear --flags`,
 `omc doctor --fix`): ver [Manual-OMC](Manual-OMC.md). Para agentes/CI:
@@ -76,7 +75,7 @@ Manual-OMC.md        # documentación completa
 CHANGELOG.md         # historial
 ```
 
-### Dónde vive cada cosa (estándar VPS)
+### Dónde vive (estándar VPS)
 
 ```text
 pipx venv (~/.local/pipx/venvs/odoo-manager-compose)  # código OMC (con git: /opt/odoo-manager-compose)
