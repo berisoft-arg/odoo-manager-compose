@@ -1,5 +1,6 @@
 {
     "recommendations": [
+        "anomalyco.opencode",
         "ms-python.python",
         "ms-python.vscode-pylance",
         "charliermarsh.ruff",
@@ -7,5 +8,5 @@
         "ms-azuretools.vscode-docker",
         "trinhanhngoc.vscode-odoo"
     ]
-    // {{PROYECTO}} — Odoo {{ODOO_VERSION}} — Codium usa open-vsx equivalentes
+    // {{PROYECTO}} — Odoo {{ODOO_VERSION}} — Codium usa open-vsx equivalentes (opencode recomendado siempre)
 }

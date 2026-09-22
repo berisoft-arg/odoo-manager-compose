@@ -11,7 +11,7 @@ from omc import flows as _flows
 
 def test_vscode_templates_sin_residuos():
     for tpl in ["vscode-settings.json.tpl", "vscode-extensions.json.tpl",
-                "vscode-launch.json.tpl", "vscode-tasks.json.tpl"]:
+                "vscode-launch.json.tpl", "vscode-tasks.json.tpl", "opencode.json.tpl"]:
         txt = template_text(tpl)
         out = render(txt, {"PROYECTO": "demo", "ODOO_VERSION": "18"})
         assert sin_renderizar(out) == [], f"{tpl} quedó con placeholders: {sin_renderizar(out)}"
@@ -22,6 +22,8 @@ def test_vscode_templates_sin_residuos():
         clean = re.sub(r",\s*([}\]])", r"\1", clean)
         data = json.loads(clean)
         assert isinstance(data, dict)
+        if tpl == "vscode-extensions.json.tpl":
+            assert "anomalyco.opencode" in clean
 
 
 def test_merge_json():

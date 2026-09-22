@@ -2324,11 +2324,42 @@ def _load_jsonc(path: Path) -> dict | None:
 
 
 def generar_vscode(salida: Path, mapping: dict, ide: str = "auto", instalar: bool = False) -> list:
-    """Genera .vscode/{settings,extensions,launch,tasks}.json con merge no destructivo."""
+    """Genera .vscode/{settings,extensions,launch,tasks}.json + opencode.json con merge no destructivo."""
     salida = Path(salida)
     vs = salida / ".vscode"
     vs.mkdir(parents=True, exist_ok=True)
     creados = []
+    # opencode.json en raíz (siempre, recomendado)
+    try:
+        oc_texto = render(cargar_template("opencode.json.tpl"), mapping)
+        if sin_renderizar(oc_texto):
+            print(f"  ⚠ opencode.json.tpl quedó con placeholders: {sin_renderizar(oc_texto)}")
+        oc_dest = salida / "opencode.json"
+        if not oc_dest.exists():
+            oc_dest.write_text(oc_texto, encoding="utf-8")
+            creados.append("opencode.json")
+        else:
+            existente = _load_jsonc(oc_dest)
+            try:
+                nuevo = json.loads(re.sub(r",\s*([}\]])", r"\1", "\n".join(
+                    l for l in oc_texto.splitlines() if not l.strip().startswith("//")
+                )))
+            except Exception:  # noqa: BLE001
+                nuevo = None
+            if existente is not None and nuevo is not None:
+                merged = merge_json(existente, nuevo)
+                if merged != existente:
+                    bkp = oc_dest.with_suffix(".json.bak")
+                    if not bkp.exists():
+                        shutil.copy2(oc_dest, bkp)
+                    oc_dest.write_text(json.dumps(merged, indent=4, ensure_ascii=False) + "\n", encoding="utf-8")
+                    creados.append("opencode.json (merge)")
+                else:
+                    creados.append("opencode.json (ya existe)")
+            else:
+                creados.append("opencode.json (existe, no tocado)")
+    except FileNotFoundError:
+        pass
     pares = [
         ("vscode-settings.json.tpl", "settings.json"),
         ("vscode-extensions.json.tpl", "extensions.json"),

@@ -1,7 +1,9 @@
 # CHANGELOG — Odoo Manager Compose (OMC)
 
-## [Sin publicar]
+## [1.1.0] - 2026-09-22
 
+- **AFIP WSAA (monitor)**: vencimiento por BD (alias/CUIT/tipo, notAfter/días, niveles ok/warn≤30/critical≤7/vencido, cache 20s) — §5.7/§14, `src/omc/monitor/app.py:366`. Incluye renew semanal certbot + `certbot delete`.
+- **Desarrollo (IDE + navegador) — opción 13**: `.vscode/{settings,extensions,launch,tasks}.json` (generados desde `vscode-*.json.tpl`, merge no destructivo con `.bak`, soporte jsonc con `//`) + `opencode.json` (`$schema` `opencode.ai/config.json`, `instructions ["AGENTS.md"]`, `anomalyco.opencode` recomendado siempre, primero en `extensions.json`, Codium open-vsx), detección `codium>code>code-oss` (auto), `opencode` en terminal integrado (`Ctrl+Esc` split, `Ctrl+Shift+Esc` nueva) instala `anomalyco.opencode` auto, `omc dev|ide [--ide codium|vscode|auto] [--instalar|--solo-generar]`, `omc crear --ide`, menú 13 + submenú Dev (configurar/verificar/extensiones Chrome/regenerar AGENTS), `AGENTS.md` enriquecido con IDE/Navegador + **My Odoo Webkit** 1.3.0 `fdohfkgekkoehlofibieijojjcmlbdok` (Model inspector/Record viewer/Field explorer/ORM snippets/Shell) — §7.6, `src/omc/flows.py:2327`.
 - **Proxy multinstancia (nginx compartido)**: nuevo proyecto central `proxy`
   (`omc proxy init`: compose + red externa `omc-proxy` + nginx único en 80/443),
   `omc web --proxy/--standalone`, sites por subdominio en `conf.d/` con TLS
@@ -21,6 +23,8 @@
   aviso de drift con `omc addons pull` para actualizar.
 - **Mailpit en dev**: buzón local (`:8025`, SMTP interno 1025), `list_db = False`,
   `.env.example` sin secretos.
+
+## [Sin publicar]
 
 ## [1.0.0]
 

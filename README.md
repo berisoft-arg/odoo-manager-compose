@@ -25,7 +25,7 @@ Asistente interactivo + CLI + monitor web + migración OCA entre versiones.
   (OpenUpgrade + `docker-compose.migrate.yml`), con backup previo siempre.
 - **Backup/restore**: dump PostgreSQL + filestore, local o Drive (+ copia dominical),
   con doble confirmación al restaurar.
-- **Desarrollo (IDE + navegador)**: `.vscode/` para VS Code/VSCodium (settings, launch, tasks, extensiones Python/Ruff/Docker/Odoo), `AGENTS.md` por proyecto y **My Odoo Webkit** Chrome (model/field/record inspector).
+- **Desarrollo (IDE + navegador)**: `.vscode/` para VS Code/VSCodium (settings, launch, tasks, extensiones `anomalyco.opencode`/Python/Ruff/Docker/Odoo), `opencode.json` (`$schema` + `instructions ["AGENTS.md"]`), `AGENTS.md` por proyecto, **My Odoo Webkit** Chrome (model/field/record) y **opencode** CLI/TUI.
 - **Multi-instancia**: puertos validados y sugeridos libres, `ODOO_GEVENT_PORT`,
   `omc list` / `omc doctor [--fix]`. Con dominio en un solo host: **proxy
   nginx compartido** (`omc proxy init` + `omc web --proxy`), un site por
@@ -55,18 +55,25 @@ omc                 # abre el menú
 
 ![Menú principal OMC — opciones 1-13 y 0 Salir](assets/images/menu.png)
 
-*Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup → `13` dev (VS Code/Codium + My Odoo Webkit).*
+*Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup → `13` dev (VS Code/Codium + My Odoo Webkit + opencode).*
+
+```bash
+# Desarrollo (opcional, recomendado siempre):
+# VS Code / VSCodium + opencode
+codium .  # o code . → .vscode/ + opencode.json ya vienen (Ctrl+Esc split, Ctrl+Shift+Esc nueva)
+opencode  # TUI: en terminal integrado instala extensión anomalyco.opencode auto; fallback: Marketplace buscar "OpenCode"
+```
 
 Menú avanzado (subcomandos directos como `omc crear --flags`,
 `omc doctor --fix`): ver [Manual-OMC](Manual-OMC.md). Para agentes/CI:
-`omc list/doctor --json`, `omc logs/update/test` y `AGENTS.md` por proyecto.
+`omc list/doctor --json`, `omc logs/update/test` y `AGENTS.md` + `opencode.json` (instrucciones para agentes).
 
 ## Estructura del repo
 
 ```text
 src/omc/            # paquete (cli, core, tui, github, gitutils, manifest,
                     #          addonsops, addons_cli, compose, flows, migrate, webapp)
-src/omc/templates/  # compose dev/prod/migrate, odoo.conf, nginx, Dockerfile, backup/restore
+src/omc/templates/  # compose dev/prod/migrate, odoo.conf, nginx, Dockerfile, backup/restore, vscode-*.json.tpl, opencode.json.tpl, agents-proyecto.md.tpl
 src/omc/versions/   # 17.env (pg15), 18.env / 19.env (pg16)
 src/omc/data/       # catálogo de addons, localizaciones, bundle ejemplo
 src/omc/monitor/    # monitor Flask solo-lectura (lo sirve `omc-monitor`)

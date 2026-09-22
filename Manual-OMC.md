@@ -67,7 +67,9 @@ mi-proyecto/
     codize/<repo>/          # clones sparse Codize
     repos.json              # estado: repos/módulos/ramas/SHA (para pull y export)
   odoo-addons.py            # stub que delega en `omc addons` (sparse-checkout)
-  AGENTS.md                 # guía para agentes (logs/update/test, reglas prod)
+  AGENTS.md                 # guía para agentes (logs/update/test, reglas prod, + IDE/Navegador Dev 13)
+  opencode.json             # config opencode ($schema opencode.ai/config.json, instructions ["AGENTS.md"], merge .bak) — opción 13 / --ide
+  .vscode/settings.json, extensions.json (incl. anomalyco.opencode), launch.json, tasks.json  # IDE VS Code/VSCodium (opción 13)
   addons-bundle.json        # bundle con lo instalado (se genera solo; para clonar instancias)
   addons-bundle.ejemplo.json# plantilla para llenar
   requirements-odoo.txt      # deps Python detectadas (si hay)
@@ -508,17 +510,19 @@ omc crear --ide codium   # o --ide vscode|auto|none (none por defecto)
 ```
 
 Qué hace `Configurar VS Code / Codium`: genera `.vscode/{settings,extensions,launch,tasks}.json`
-desde templates (merge no destructivo con `.bak` si cambia). `settings` con `extraPaths` a `addons/`,
-`launch` F5 attach debugpy `5678`, `tasks` para `omc doctor/update/test/logs`. Si hay `codium`/`code`
-y se elige instalar, corre `codium --install-extension` para `ms-python.python`, `pylance`, `ruff`,
-`vscode-json`, `vscode-docker`, `vscode-odoo` (Codium usa open-vsx equivalentes).
+desde `vscode-*.json.tpl` + `opencode.json` en raíz desde `opencode.json.tpl` (`$schema` `opencode.ai/config.json`, `instructions ["AGENTS.md"]`) con merge no destructivo (`.bak`, jsonc `//`, shallow listas sin dup). `settings` con `extraPaths` a `addons/`, `launch` F5 attach debugpy `5678`, `tasks` para `omc doctor/update/test/logs`. `opencode.json` con `AGENTS.md`, atajos `Ctrl+Esc` split / `Ctrl+Shift+Esc` nueva. Si hay `codium`/`code` y se elige instalar, corre `codium --install-extension` para `anomalyco.opencode` (recomendado siempre, primero) + `ms-python.python`, `pylance`, `ruff`, `vscode-json`, `vscode-docker`, `vscode-odoo` (Codium usa open-vsx equivalentes).
+
+```bash
+opencode              # TUI: en terminal integrado instala extensión anomalyco.opencode auto (Ctrl+Esc split)
+code --install-extension anomalyco.opencode --force  # o codium --install-extension anomalyco.opencode
+```
 
 **Navegador:** `My Odoo Webkit` (principal, v1.3.0, 76 usuarios) — https://chromewebstore.google.com/detail/my-odoo-webkit/fdohfkgekkoehlofibieijojjcmlbdok?hl=es
 Model inspector (modelo/ID/vista/action/XMLID/context/domain), record viewer (JSON-RPC), field explorer
 (type/label/relation), ORM snippets (browse/search/create/write/unlink), shell commands. Alternativas:
 Odoo Toolbox y Odoo Debug (`Ctrl+.`).
 
-Regenerar `AGENTS.md`: re-renderiza la plantilla con `PROYECTO/ODOO_VERSION/MAILPIT_PORT` + secciones IDE/Navegador.
+Regenerar `AGENTS.md`: re-renderiza la plantilla con `PROYECTO/ODOO_VERSION/MAILPIT_PORT` + secciones IDE (`codium`/`code` + `anomalyco.opencode`) y Navegador (My Odoo Webkit).
 
 ---
 
@@ -724,7 +728,7 @@ pipx venv (~/.local/pipx/venvs/odoo-manager-compose)  # código OMC (con git: /o
 ```text
 src/omc/                      # paquete (cli, core, tui, github, gitutils, manifest,
                               #          addonsops, addons_cli, compose, flows, migrate, webapp)
-src/omc/templates/            # compose dev/prod/migrate, odoo.conf, nginx, Dockerfile, backup/restore, README
+src/omc/templates/            # compose dev/prod/migrate, odoo.conf, nginx, Dockerfile, backup/restore, README, vscode-*.json.tpl, opencode.json.tpl, agents-proyecto.md.tpl
 src/omc/versions/             # 17.env (pg15), 18.env / 19.env (pg16)
 src/omc/data/                 # addons-catalog.json, localizaciones.json, addons-bundle.ejemplo.json
 pyproject.toml                # pip install odoo-manager-compose -> comandos omc, omc-monitor
