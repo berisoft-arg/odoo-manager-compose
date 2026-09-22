@@ -45,9 +45,9 @@ con `git sparse-checkout` (clones de pocos MB con `git pull` futuro).
 ```text
 mi-proyecto/
   docker-compose.yml        # db (postgres) + odoo (+ nginx/certbot en prod con dominio)
-  .env                      # versiones, passwords, puertos, tuning PG, límites, dominio
-  .env.ejemplo              # plantilla sin secretos (copiar a .env y completar)
-  config/odoo.conf          # addons_path múltiple, workers, proxy_mode si hay nginx, list_db = False
+  .env                      # versiones, passwords, puertos, tuning PG, límites, dominio (ignorado en git)
+  .env.ejemplo              # plantilla sin secretos (sin VPS_*/secrets, copiar a .env y completar; commitear solo este)
+  config/odoo.conf          # addons_path múltiple, workers, proxy_mode si hay nginx, list_db = False (oculta /web/database/manager y selector BD)
   nginx/nginx.conf          # solo prod con dominio
   letsencrypt/ certbot-www/ # solo prod con dominio
   scripts/
@@ -269,7 +269,7 @@ y ofrece correr `sync` (deps + Dockerfile con
 m2crypto/SECLEVEL/cache + rebuild). Además genera `scripts/parametros_ar.sh`
 (idempotente: crea `ir.config_parameter` si no existen, hoy `report.url`
 → `http://localhost:8069` y `afip.ws.env.type` → `homologation`) y ofrece fijarlos si ya hay BD creada.
-Acordate de pasar `afip.ws.env.type` a `production` cuando factures de verdad.
+Acordate de pasar `afip.ws.env.type` a `production` (inglés, Odoo/pyafipws) cuando factures de verdad — no confundir con `ENTORNO=produccion` (español, variable OMC del proyecto).
 El monitor (opción 6, §14) muestra por BD el vencimiento del certificado WSAA
 (alias/CUIT/tipo → `notAfter`/`días`, niveles `ok`/`warn ≤30`/`critical ≤7`/`vencido` con color e ícono).
 En la creación ya no se pregunta localización:
@@ -427,6 +427,15 @@ Reglas duras (fallan limpio, sin escribir a medias):
 - El sitio odoo se levanta **antes** del primer reload (así el site responde
   de entrada). Después, un backend caído solo tira su propio site (5xx):
   los upstreams se resuelven por request y el reload nunca voltea al resto.
+  Cada site proxy usa **resolver dinámico** sin `upstream` estático (uno por `conf.d/<dominio>.conf`):
+
+  ```nginx
+  resolver 127.0.0.11 valid=10s;   # DNS embebido Docker
+  set $up tienda-odoo:8069;
+  proxy_pass http://$up;           # resuelve por request, valid 10s
+  ```
+
+  vs clásico con `upstream odoo { server odoo:8069; }` (global, resuelve al cargar).
 
 ### 7.4 Tutorial: dos subdominios con HTTPS en un host
 
@@ -574,8 +583,8 @@ docker compose run --rm certbot renew && docker compose exec nginx nginx -s relo
 # restore.sh levanta db solo si hace falta (sirve en servidor nuevo) y acepta
 # backups de instalaciones desde fuente: si no puede DROP+CREATE, restaura con
 # pg_restore --clean --if-exists sobre la BD existente.
-# El .gitignore generado ignora backups/, letsencrypt/, certbot-www/ y
-# scripts/rclone.conf: los tokens nunca se commitean por default.
+# El .gitignore generado ignora .env (secrets) + backups/, letsencrypt/, certbot-www/ y
+# scripts/rclone.conf: los tokens nunca se commitean por default (.env.ejemplo sí se commitea).
 # Rclone: host si está, si no el servicio `rclone` del compose (perfil backup).
 # Rclone sale del compose (servicio `rclone`, perfil `backup`): **nada que instalar en host**.
 # Menú 5 lo configura (incluso dentro del servicio) y verifica el remote.
