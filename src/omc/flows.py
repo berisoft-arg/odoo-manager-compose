@@ -2564,7 +2564,7 @@ def menu_principal() -> str:
     ]
     print(banner_omc(PKG_VERSION))
     labels = [v for _k, v in acciones if _k != "salir"]
-    # Opciones navegables: 1..11 + 0 Salir (12 items, 0 navegable)
+    # Opciones navegables: 1..13 + 0 Salir (14 items, 0 navegable)
     nav_items = [f"{i}) {lab}" for i, lab in enumerate(labels, 1)] + ["0) Salir"]
     # Intento con flechas si hay tty real
     try:

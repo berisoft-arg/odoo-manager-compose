@@ -24,6 +24,11 @@
 - **Mailpit en dev**: buzón local (`:8025`, SMTP interno 1025), `list_db = False`,
   `.env.example` sin secretos.
 
+## [1.1.1] - 2026-09-22
+
+- **Fix**: menú captura `assets/images/menu.png` 598x433 con 13) Desarrollo (banner 1.1.0), comentario `src/omc/flows.py:2567` 1..13 + 0 Salir (14 items), licencia SPDX string `AGPL-3.0-only`.
+- **Docs**: `Manual §1.1` `.env` ignorado + `.env.ejemplo` sin `VPS_*` + `list_db=False` oculta `/web/database/manager`, `§5.7` `production` vs `ENTORNO=produccion`, `§7.3` snippet `resolver 127.0.0.11 valid=10s` dinámico vs clásico `upstream`.
+
 ## [Sin publicar]
 
 ## [1.0.0]
