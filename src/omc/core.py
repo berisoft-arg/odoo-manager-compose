@@ -285,6 +285,19 @@ def sin_renderizar(texto: str) -> list:
     return sorted(set(re.findall(r"\{\{([A-Za-z0-9_]+)\}\}", texto)))
 
 
+def merge_json(base: dict, nuevo: dict) -> dict:
+    """Merge shallow: nuevo pisa base, listas se unen sin duplicados."""
+    out = dict(base)
+    for k, v in nuevo.items():
+        if isinstance(v, list) and isinstance(out.get(k), list):
+            out[k] = out[k] + [x for x in v if x not in out[k]]
+        elif isinstance(v, dict) and isinstance(out.get(k), dict):
+            out[k] = {**out[k], **v}
+        else:
+            out[k] = v
+    return out
+
+
 def puerto_en_uso(puerto: int) -> bool:
     """True si el puerto está ocupado en el host o publicado por algún contenedor docker."""
     import socket

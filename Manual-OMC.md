@@ -6,9 +6,9 @@
 > `omc` (paquete `pip install odoo-manager-compose`) — Odoo Manager Compose: crea, opera y migra
 > instancias Odoo con docker-compose. Versiones Odoo 17 / 18 / 19, entornos desarrollo / producción.
 >
-> **Uso diario: solo `omc`, sin argumentos.** Se abre el menú (opciones 1-12, `0` para salir)
+> **Uso diario: solo `omc`, sin argumentos.** Se abre el menú (opciones 1-13, `0` para salir)
 > y todo se elige ahí: crear, descargar módulos, localizar, nginx, rclone, monitor, GitHub,
-> backup, restore, migrar, proxy, migrar a otro VPS. Al terminar cada acción vuelve al menú.
+> backup, restore, migrar, proxy, migrar a otro VPS, desarrollo (IDE + navegador). Al terminar cada acción vuelve al menú.
 > Los subcomandos directos (`omc crear --flags`, `omc addons ...`, etc.) existen como
 > **atajos avanzados** (scripts, VPS sin tty); este manual los marca como tales.
 
@@ -113,7 +113,7 @@ addons_path = /mnt/extra-addons/custom,/mnt/extra-addons,/mnt/extra-addons/adhoc
 omc     # sin flags abre el menú
 ```
 
-![Menú principal OMC — opciones 1-12 y 0 Salir](assets/images/menu.png)
+![Menú principal OMC — opciones 1-13 y 0 Salir](assets/images/menu.png)
 
 *Opción 1 pide: 1) Nombre  2) Entorno  3) Versión  4) Puertos (validados)  5) Passwords  6) ¿Desplegar? Al terminar vuelve al menú: los módulos NO se descargan acá. Flujo habitual: 1 (crear) → 2 (descargar módulos con bundle o lista, rama X.0 automática) → 3 (localización AR si la necesitas: deja m2crypto/SECLEVEL + ofrece aplicar con Dockerfile + rebuild).*
 
@@ -495,6 +495,31 @@ omc rclone --proyecto . [--rclone-remote gdrive]
 Crea `scripts/rclone.conf`, ofrece correr `rclone config` guiado y verifica el remote.
 Sin rclone instalado indica cómo instalarlo. Guarda el remote en `.env`.
 
+### 7.6 Desarrollo (IDE + navegador) — opción 13
+
+Es la **opción 13 del menú** (submenú Dev). Avanzado sin menú:
+
+```bash
+omc dev --proyecto .                          # abre submenú interactivo
+omc dev --proyecto . --ide codium             # genera .vscode con VSCodium
+omc dev --proyecto . --ide vscode --instalar  # genera + instala extensiones
+omc ide --proyecto . --ide auto --solo-generar
+omc crear --ide codium   # o --ide vscode|auto|none (none por defecto)
+```
+
+Qué hace `Configurar VS Code / Codium`: genera `.vscode/{settings,extensions,launch,tasks}.json`
+desde templates (merge no destructivo con `.bak` si cambia). `settings` con `extraPaths` a `addons/`,
+`launch` F5 attach debugpy `5678`, `tasks` para `omc doctor/update/test/logs`. Si hay `codium`/`code`
+y se elige instalar, corre `codium --install-extension` para `ms-python.python`, `pylance`, `ruff`,
+`vscode-json`, `vscode-docker`, `vscode-odoo` (Codium usa open-vsx equivalentes).
+
+**Navegador:** `My Odoo Webkit` (principal, v1.3.0, 76 usuarios) — https://chromewebstore.google.com/detail/my-odoo-webkit/fdohfkgekkoehlofibieijojjcmlbdok?hl=es
+Model inspector (modelo/ID/vista/action/XMLID/context/domain), record viewer (JSON-RPC), field explorer
+(type/label/relation), ORM snippets (browse/search/create/write/unlink), shell commands. Alternativas:
+Odoo Toolbox y Odoo Debug (`Ctrl+.`).
+
+Regenerar `AGENTS.md`: re-renderiza la plantilla con `PROYECTO/ODOO_VERSION/MAILPIT_PORT` + secciones IDE/Navegador.
+
 ---
 
 ## 8. Dependencias externas y Dockerfile
@@ -765,7 +790,7 @@ omc-monitor --host 0.0.0.0 --token MI_TOKEN_LARGO  # nunca sin token ni sin TLS
 pipx install odoo-manager-compose
 # o
 pip install odoo-manager-compose --break-system-packages
-omc --version  # abre el menú 1-12
+omc --version  # abre el menú 1-13
 ```
 
 Para desarrollo:
@@ -773,7 +798,7 @@ Para desarrollo:
 ```bash
 pip install -e .            # editable: los cambios en src/ aplican al acto
 omc                # abre el menú: todo se elige ahí (crear, sync, localizar, ...,
-                   # web, rclone, monitor, github, backup, restore, migrar; 0 = salir)
+                   # web, rclone, monitor, github, backup, restore, migrar, dev; 0 = salir)
 ```
 
 Diagnóstico directo (atajos sin menú):
@@ -853,7 +878,7 @@ correría con los binarios origen y no migraría nada) y `scripts/migrate_db.sh`
 pipx install odoo-manager-compose
 # o
 pip install odoo-manager-compose --break-system-packages
-omc --version  # abre el menú 1-12
+omc --version  # abre el menú 1-13
 ```
 
 Para VPS con monitor systemd, luego: `omc` se encarga de `/opt/omc` y `/opt` (sudo único, uso diario sin sudo).

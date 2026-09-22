@@ -14,7 +14,7 @@ pip install odoo-manager-compose --break-system-packages
 
 ```bash
 omc --version
-omc  # abre el menú 1-12
+omc  # abre el menú 1-13
 ```
 
 ## Links

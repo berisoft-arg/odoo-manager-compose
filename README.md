@@ -25,6 +25,7 @@ Asistente interactivo + CLI + monitor web + migración OCA entre versiones.
   (OpenUpgrade + `docker-compose.migrate.yml`), con backup previo siempre.
 - **Backup/restore**: dump PostgreSQL + filestore, local o Drive (+ copia dominical),
   con doble confirmación al restaurar.
+- **Desarrollo (IDE + navegador)**: `.vscode/` para VS Code/VSCodium (settings, launch, tasks, extensiones Python/Ruff/Docker/Odoo), `AGENTS.md` por proyecto y **My Odoo Webkit** Chrome (model/field/record inspector).
 - **Multi-instancia**: puertos validados y sugeridos libres, `ODOO_GEVENT_PORT`,
   `omc list` / `omc doctor [--fix]`. Con dominio en un solo host: **proxy
   nginx compartido** (`omc proxy init` + `omc web --proxy`), un site por
@@ -41,20 +42,20 @@ Python 3.10+, Git, Docker con plugin compose. Para repos privados en https:
 pipx install odoo-manager-compose
 # o
 pip install odoo-manager-compose --break-system-packages
-omc --version  # abre el menú 1-12
+omc --version  # abre el menú 1-13
 ```
 
 > Manual completo: [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker) y [§17 VPS](Manual-OMC.md#17-vps-producción).
 
-## Uso rápido: el menú básico (1-12, 0 sale)
+## Uso rápido: el menú básico (1-13, 0 sale)
 
 ```bash
 omc                 # abre el menú
 ```
 
-![Menú principal OMC — opciones 1-12 y 0 Salir](assets/images/menu.png)
+![Menú principal OMC — opciones 1-13 y 0 Salir](assets/images/menu.png)
 
-*Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup.*
+*Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup → `13` dev (VS Code/Codium + My Odoo Webkit).*
 
 Menú avanzado (subcomandos directos como `omc crear --flags`,
 `omc doctor --fix`): ver [Manual-OMC](Manual-OMC.md). Para agentes/CI:

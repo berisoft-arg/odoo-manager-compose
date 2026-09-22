@@ -11,6 +11,19 @@ omc doctor --proyecto .        # valida compose/conf/addons/.env
 omc list                       # ver todas las instancias
 ```
 
+## IDE (VS Code / VSCodium)
+
+- Abrir: `codium .` o `code .` — la carpeta ya trae `.vscode/` (settings, launch F5, tasks).
+- Extensiones recomendadas: Python, Pylance, Ruff, Docker, Odoo (`ms-python.python`, `charliermarsh.ruff`, `trinhanhngoc.vscode-odoo`).
+- Codium usa open-vsx equivalentes; el menú Dev (opción 13) puede instalarlas con `codium --install-extension`.
+- Debug: `F5` → `Odoo {{ODOO_VERSION}}: attach` (debugpy 5678) o `shell`.
+
+## Navegador (Chrome)
+
+- **My Odoo Webkit** (principal, 76 usuarios, v1.3.0): https://chromewebstore.google.com/detail/my-odoo-webkit/fdohfkgekkoehlofibieijojjcmlbdok?hl=es
+  Model inspector (modelo/ID/vista/action/XMLID/context/domain), record viewer (JSON-RPC), field explorer (type/label/relation), snippets ORM (browse/search/create/write/unlink), shell commands.
+- Alternativas: Odoo Toolbox (Odoo.SH) y Odoo Debug (toggle `?debug=1` con `Ctrl+.`).
+
 ## Reglas (no romper en prod)
 
 - Nunca `DROP DATABASE`, `down -v` ni `web --standalone` si hay proxy central.

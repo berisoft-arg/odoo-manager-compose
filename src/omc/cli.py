@@ -35,6 +35,8 @@ def _add_crear_args(p):
     p.add_argument("--rclone-remote", default=None)
     p.add_argument("--vcpus", type=float, default=None)
     p.add_argument("--ram-gb", type=float, default=None)
+    p.add_argument("--ide", default="none", choices=["none", "auto", "codium", "vscode"],
+                   help="Configurar .vscode (none por defecto, auto=codium>code)")
 
 
 def build_parser():
@@ -137,6 +139,19 @@ def build_parser():
     mv.add_argument("--todo", action="store_true", help="Todos los proyectos prod del host")
     mv.add_argument("--consistente", action="store_true", help="Parar db también (corte total, más consistente)")
 
+    dev = sub.add_parser("dev", help="Desarrollo (IDE + navegador)")
+    dev.add_argument("--proyecto", default=None, help="Proyecto (default: cwd)")
+    dev.add_argument("--ide", default=None, choices=["auto", "codium", "vscode"],
+                     help="IDE a configurar (default: submenú)")
+    dev.add_argument("--instalar", action="store_true", help="Instalar extensiones (requiere code/codium)")
+    dev.add_argument("--solo-generar", action="store_true", help="Solo generar .vscode sin instalar")
+    # alias compat
+    ide = sub.add_parser("ide", help="Alias de dev")
+    ide.add_argument("--proyecto", default=None)
+    ide.add_argument("--ide", default=None, choices=["auto", "codium", "vscode"])
+    ide.add_argument("--instalar", action="store_true")
+    ide.add_argument("--solo-generar", action="store_true")
+
     return p
 
 
@@ -154,14 +169,14 @@ def _ejecutar_accion_menu(accion):
             addon=[], sin_addons=False, bundle=None, localizacion=None,
             deploy=False, sin_deploy=False, dominio=None, email=None, sin_nginx=False,
             staging=False, odoo_cpus=None, odoo_mem=None, db_cpus=None, db_mem=None,
-            rclone_remote=None, vcpus=None, ram_gb=None, proyecto=None
+            rclone_remote=None, vcpus=None, ram_gb=None, ide="none", proyecto=None
         ))
         return
-    # resto de acciones: monitor/github/proxy/migrar-vps no necesitan proyecto si es --todo
-    if accion in ("monitor", "github", "proxy", "migrar_vps"):
-        from .flows import run_monitor, run_github, run_proxy, run_migrar_vps
+    # resto de acciones: monitor/github/proxy/migrar-vps/dev no necesitan proyecto si es --todo
+    if accion in ("monitor", "github", "proxy", "migrar_vps", "dev"):
+        from .flows import run_monitor, run_github, run_proxy, run_migrar_vps, run_dev
         {"monitor": run_monitor, "github": run_github,
-         "proxy": run_proxy, "migrar_vps": run_migrar_vps}[accion](SimpleNamespace(proyecto=None))
+         "proxy": run_proxy, "migrar_vps": run_migrar_vps, "dev": run_dev}[accion](SimpleNamespace(proyecto=None))
         return
     # resto de acciones necesitan proyecto (se elige uno)
     # reutilizar lógica de flows.elegir_proyecto si existe
@@ -283,6 +298,9 @@ def main(argv=None):
         from .flows import run_web, run_rclone, run_monitor, run_github, run_backup, run_restore
         {"web": run_web, "rclone": run_rclone, "monitor": run_monitor,
          "github": run_github, "backup": run_backup, "restore": run_restore}[args.cmd](args)
+    elif args.cmd in ("dev", "ide"):
+        from .flows import run_dev
+        run_dev(args)
     else:
         print(f"Comando desconocido: {args.cmd}")
         sys.exit(1)

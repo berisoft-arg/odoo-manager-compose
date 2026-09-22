@@ -5,6 +5,7 @@ Sin argparse (eso vive en cli.py). Toda pregunta pasa por tui.ask_*.
 
 import json
 import os
+import re
 import secrets
 import shutil
 import subprocess
@@ -54,6 +55,8 @@ from .core import (
     read_env_branch,
     leer_env,
     ENTORNOS,
+    merge_json,
+    sin_renderizar,
 )
 from .compose import (
     generar_compose,
@@ -2283,6 +2286,233 @@ def elegir_proyecto() -> Path:
     return cands[labels.index(elegida)]
 
 
+def _detectar_ide_bin(preferencia: str = "auto") -> str | None:
+    """Prefiere codium si existe, si no code. preferencia: auto|codium|vscode"""
+    if preferencia == "codium":
+        return "codium" if shutil.which("codium") else None
+    if preferencia == "vscode":
+        return "code" if shutil.which("code") else None
+    # auto: codium primero (usuario usa VSCodium), luego code
+    if shutil.which("codium"):
+        return "codium"
+    if shutil.which("code"):
+        return "code"
+    if shutil.which("code-oss"):
+        return "code-oss"
+    return None
+
+
+def _load_jsonc(path: Path) -> dict | None:
+    """Lee JSON con // comentarios (VS Code jsonc)."""
+    try:
+        txt = path.read_text(encoding="utf-8")
+        # quita líneas // y comentarios inline simples
+        lines = []
+        for ln in txt.splitlines():
+            if ln.strip().startswith("//"):
+                continue
+            # quita // inline solo si aparecen fuera de strings (aprox)
+            if "//" in ln and '"' not in ln.split("//", 1)[0]:
+                ln = ln.split("//", 1)[0]
+            lines.append(ln)
+        clean = "\n".join(lines)
+        # quita comas colgantes
+        clean = re.sub(r",\s*([}\]])", r"\1", clean)
+        return json.loads(clean)
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def generar_vscode(salida: Path, mapping: dict, ide: str = "auto", instalar: bool = False) -> list:
+    """Genera .vscode/{settings,extensions,launch,tasks}.json con merge no destructivo."""
+    salida = Path(salida)
+    vs = salida / ".vscode"
+    vs.mkdir(parents=True, exist_ok=True)
+    creados = []
+    pares = [
+        ("vscode-settings.json.tpl", "settings.json"),
+        ("vscode-extensions.json.tpl", "extensions.json"),
+        ("vscode-launch.json.tpl", "launch.json"),
+        ("vscode-tasks.json.tpl", "tasks.json"),
+    ]
+    for tpl, out in pares:
+        texto = render(cargar_template(tpl), mapping)
+        if sin_renderizar(texto):
+            print(f"  ⚠ {tpl} quedó con placeholders sin sustituir: {sin_renderizar(texto)}")
+        dest = vs / out
+        if dest.exists():
+            existente = _load_jsonc(dest)
+            try:
+                nuevo = json.loads(re.sub(r",\s*([}\]])", r"\1", "\n".join(
+                    l for l in texto.splitlines() if not l.strip().startswith("//")
+                )))
+            except Exception:  # noqa: BLE001
+                nuevo = None
+            if existente is not None and nuevo is not None:
+                merged = merge_json(existente, nuevo)
+                # backup si cambia
+                if merged != existente:
+                    bkp = dest.with_suffix(dest.suffix + ".bak")
+                    if not bkp.exists():
+                        shutil.copy2(dest, bkp)
+                    dest.write_text(json.dumps(merged, indent=4, ensure_ascii=False) + "\n", encoding="utf-8")
+                    creados.append(f".vscode/{out} (merge)")
+                else:
+                    creados.append(f".vscode/{out} (ya existe, sin cambios)")
+            else:
+                creados.append(f".vscode/{out} (existe, no tocado)")
+            continue
+        dest.write_text(texto, encoding="utf-8")
+        creados.append(f".vscode/{out}")
+    # instalar extensiones si se pide y hay bin
+    if instalar:
+        bin_ide = _detectar_ide_bin(ide)
+        if not bin_ide:
+            print("  ⚠ No se encontró `codium` ni `code` para instalar extensiones (solo se generó .vscode/).")
+        else:
+            exts = ( _load_jsonc(vs / "extensions.json") or {}).get("recommendations", [])
+            if not exts:
+                try:
+                    txt = (vs / "extensions.json").read_text(encoding="utf-8")
+                    exts = json.loads(re.sub(r",\s*([}\]])", r"\1", "\n".join(
+                        l for l in txt.splitlines() if not l.strip().startswith("//")
+                    ))).get("recommendations", [])
+                except Exception:  # noqa: BLE001
+                    exts = []
+            for e in exts:
+                print(f"  Instalando {e} en {bin_ide} ...")
+                subprocess.run([bin_ide, "--install-extension", e, "--force"],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return creados
+
+
+def run_dev(args=None):
+    """Menú 13 / `omc dev|ide`: Desarrollo (IDE + navegador)."""
+    proj = None
+    if args is not None and getattr(args, "proyecto", None):
+        proj = Path(args.proyecto).resolve()
+    else:
+        # si hay flag --proyecto usarlo, si no elegir
+        try:
+            from .core import find_proyecto
+            # si args trae proyecto explícito ya resuelto arriba
+            if args is not None and getattr(args, "proyecto", None):
+                proj = find_proyecto(args.proyecto)
+            else:
+                # intentar cwd, si no elegir
+                try:
+                    proj = find_proyecto()
+                except SystemExit:
+                    from .flows import elegir_proyecto as _elegir  # noqa: PLC0415
+                    proj = _elegir()
+        except Exception:  # noqa: BLE001
+            proj = Path.cwd()
+    # si es instalación directa sin submenú (ej --ide codium --instalar)
+    ide_flag = getattr(args, "ide", None) if args is not None else None
+    instalar_flag = getattr(args, "instalar", False) if args is not None else False
+    solo_generar = getattr(args, "solo_generar", False) if args is not None else False
+    if ide_flag:
+        env = leer_env(proj)
+        mapping = {"PROYECTO": proj.name, "ODOO_VERSION": env.get("ODOO_VERSION", "18")}
+        ide_norm = "codium" if ide_flag == "codium" else "vscode" if ide_flag == "vscode" else "auto"
+        generar_vscode(proj, mapping, ide=ide_norm, instalar=instalar_flag and not solo_generar)
+        print(f"\n✓ .vscode generado en {proj}/.vscode  (ide={ide_norm})")
+        print("  Chrome: My Odoo Webkit https://chromewebstore.google.com/detail/my-odoo-webkit/fdohfkgekkoehlofibieijojjcmlbdok?hl=es")
+        return
+    # submenú interactivo
+    while True:
+        print(marco("Desarrollo — IDE + navegador", [
+            "1) Configurar VS Code / Codium (.vscode)",
+            "2) Verificar extensiones IDE",
+            "3) Extensiones Chrome (my-odoo-webkit)",
+            "4) Regenerar AGENTS.md del proyecto",
+            tenue("0) Volver"),
+        ], pie="↑/↓ + Enter · número + Enter · ESC sale"))
+        # usar elegir_interactivo si hay tty
+        try:
+            from .tui import elegir_interactivo as _eleg  # noqa: PLC0415
+            sel = _eleg(["1) Configurar VS Code / Codium (.vscode)",
+                         "2) Verificar extensiones IDE",
+                         "3) Extensiones Chrome (my-odoo-webkit)",
+                         "4) Regenerar AGENTS.md del proyecto",
+                         "0) Volver"], titulo_txt="Desarrollo — ¿qué hacer?")
+            if sel is not None:
+                if sel == 4:
+                    return
+                choice = str(sel + 1) if sel < 4 else "0"
+            else:
+                choice = ask_opcion(["Configurar VS Code / Codium", "Verificar extensiones", "Extensiones Chrome", "Regenerar AGENTS.md", "Volver"], "Elegí")
+                choice = {"Configurar VS Code / Codium": "1", "Verificar extensiones": "2",
+                          "Extensiones Chrome": "3", "Regenerar AGENTS.md": "4", "Volver": "0"}.get(choice, "0")
+        except Exception:  # noqa: BLE001
+            choice = ask_texto("Elige [0-4]", "0")
+        if choice == "0":
+            return
+        env = leer_env(proj)
+        mapping = {"PROYECTO": proj.name, "ODOO_VERSION": env.get("ODOO_VERSION", "18"),
+                   "MAILPIT_PORT": env.get("MAILPIT_PORT", "8025")}
+        if choice == "1":
+            pref = "auto"
+            if es_interactivo():
+                pref_raw = ask_opcion(["Auto (codium > code)", "VSCodium (codium)", "VS Code (code)", "Solo generar (sin instalar)"], "IDE")
+                pref = {"Auto (codium > code)": "auto", "VSCodium (codium)": "codium",
+                        "VS Code (code)": "vscode", "Solo generar (sin instalar)": "auto"}.get(pref_raw, "auto")
+                instalar = pref_raw != "Solo generar (sin instalar)"
+            else:
+                instalar = False
+            creados = generar_vscode(proj, mapping, ide=pref, instalar=instalar)
+            print("\nvscode creados/merge:")
+            for c in creados:
+                print(f"  - {c}")
+            bin_ide = _detectar_ide_bin(pref)
+            if bin_ide:
+                print(f"  Abrir: {bin_ide} {proj}")
+            else:
+                print(f"  Abrir: codium {proj}  o  code {proj}")
+        elif choice == "2":
+            bin_ide = _detectar_ide_bin("auto")
+            if not bin_ide:
+                print("  No se encontró `codium` ni `code`. Instalá VSCodium/VS Code y reintentá.")
+                continue
+            try:
+                r = subprocess.run([bin_ide, "--list-extensions"], text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, timeout=10)
+                instaladas = set((r.stdout or "").lower().splitlines())
+            except Exception:  # noqa: BLE001
+                instaladas = set()
+            exts = ["ms-python.python", "ms-python.vscode-pylance", "charliermarsh.ruff",
+                    "ms-vscode.vscode-json", "ms-azuretools.vscode-docker", "trinhanhngoc.vscode-odoo"]
+            print(f"  IDE detectado: {bin_ide}")
+            for e in exts:
+                print(f"    {'✓' if e.lower() in instaladas else '✗'} {e}")
+            if es_interactivo() and ask_si_no("¿Instalar faltantes?", False):
+                for e in exts:
+                    if e.lower() not in instaladas:
+                        print(f"  Instalando {e} ...")
+                        subprocess.run([bin_ide, "--install-extension", e, "--force"],
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif choice == "3":
+            print(marco("Chrome — My Odoo Webkit (principal)", [
+                "My Odoo Webkit v1.3.0 — 76 usuarios",
+                "https://chromewebstore.google.com/detail/my-odoo-webkit/fdohfkgekkoehlofibieijojjcmlbdok?hl=es",
+                "• Model inspector (modelo/ID/vista/action/XMLID/context/domain)",
+                "• Record viewer (JSON-RPC, search, copy JSON)",
+                "• Field explorer (type/label/relation, searchable)",
+                "• ORM snippets (browse/search/create/write/unlink)",
+                "• Shell commands (odoo-bin, odoo.sh, psql, lnav)",
+                "Alternativas: Odoo Toolbox, Odoo Debug (?debug=1, Ctrl+.)",
+            ]))
+            if es_interactivo() and shutil.which("xdg-open") and ask_si_no("¿Abrir Chrome Web Store?", False):
+                subprocess.Popen(["xdg-open", "https://chromewebstore.google.com/detail/my-odoo-webkit/fdohfkgekkoehlofibieijojjcmlbdok?hl=es"],
+                                 stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        elif choice == "4":
+            dest = proj / "AGENTS.md"
+            bkp = dest.with_suffix(".md.bak") if dest.exists() else None
+            if bkp and not bkp.exists() and dest.exists():
+                shutil.copy2(dest, bkp)
+            dest.write_text(render(cargar_template("agents-proyecto.md.tpl"), mapping), encoding="utf-8")
+            print(f"  ✓ AGENTS.md regenerado en {dest}" + (f" (backup {bkp})" if bkp else ""))
+
+
 def menu_principal() -> str:
     """Menú inicial. Devuelve acción o 'crear' para seguir flujo clásico."""
     acciones = [
@@ -2298,6 +2528,7 @@ def menu_principal() -> str:
         ("migrar", "Migrar proyecto a nueva versión Odoo (OCA)"),
         ("proxy", "Proxy multinstancia (nginx compartido por subdominio)"),
         ("migrar_vps", "Migrar instancia a otro VPS (paquete completo)"),
+        ("dev", "Desarrollo (IDE + navegador)"),
         ("salir", "Salir"),
     ]
     print(banner_omc(PKG_VERSION))
@@ -3288,6 +3519,21 @@ def crear_proyecto(args):
     (salida / ".gitignore").write_text(gitignore, encoding="utf-8")
     (salida / "AGENTS.md").write_text(
         render(cargar_template("agents-proyecto.md.tpl"), mapping), encoding="utf-8")
+    # --- IDE (.vscode) opcional: --ide codium|vscode|auto|none ---
+    ide_opt = getattr(args, "ide", "none")
+    if ide_opt and ide_opt != "none":
+        ide_norm = "codium" if ide_opt == "codium" else "vscode" if ide_opt == "vscode" else "auto"
+        creados_vs = generar_vscode(salida, mapping, ide=ide_norm, instalar=False)
+        print("\nIDE .vscode:")
+        for c in creados_vs:
+            print(f"  - {c}")
+        print("  Chrome: My Odoo Webkit https://chromewebstore.google.com/detail/my-odoo-webkit/fdohfkgekkoehlofibieijojjcmlbdok?hl=es")
+    elif es_interactivo() and not args.no_input and not args.sin_addons:
+        # pregunta opt-in solo en menú interactivo, no en CI
+        if ask_si_no("¿Configurar VS Code / Codium (.vscode)?", False):
+            pref_raw = ask_opcion(["Auto (codium > code)", "VSCodium (codium)", "VS Code (code)", "Solo generar"], "IDE")
+            pref = {"Auto (codium > code)": "auto", "VSCodium (codium)": "codium", "VS Code (code)": "vscode", "Solo generar": "auto"}.get(pref_raw, "auto")
+            generar_vscode(salida, mapping, ide=pref, instalar=pref_raw != "Solo generar")
     print("\nArchivos creados:")
     for f in [
         "docker-compose.yml",
