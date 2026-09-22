@@ -58,10 +58,11 @@ omc                 # abre el menú
 *Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup → `13` dev (VS Code/Codium + My Odoo Webkit + opencode).*
 
 ```bash
-# Desarrollo (opcional, recomendado siempre):
+# Desarrollo (opcional, recomendado siempre — solo dev; en prod VPS solo con --force para opencode terminal sin IDE)
 # VS Code / VSCodium + opencode
 codium .  # o code . → .vscode/ + opencode.json ya vienen (Ctrl+Esc split, Ctrl+Shift+Esc nueva)
 opencode  # TUI: en terminal integrado instala extensión anomalyco.opencode auto; fallback: Marketplace buscar "OpenCode"
+# En VPS (prod): omc dev --proyecto . --force  # solo opencode.json terminal, sin .vscode ni extensión
 ```
 
 Menú avanzado (subcomandos directos como `omc crear --flags`,

@@ -512,14 +512,15 @@ Es la **opción 13 del menú** (submenú Dev). Avanzado sin menú:
 
 ```bash
 omc dev --proyecto .                          # abre submenú interactivo
-omc dev --proyecto . --ide codium             # genera .vscode con VSCodium
-omc dev --proyecto . --ide vscode --instalar  # genera + instala extensiones
+omc dev --proyecto . --ide codium             # genera .vscode + opencode.json (solo dev)
+omc dev --proyecto . --ide vscode --instalar  # genera + instala extensiones (solo dev)
+omc dev --proyecto . --force --ide codium     # en VPS prod: solo opencode.json terminal (sin .vscode/IDE)
 omc ide --proyecto . --ide auto --solo-generar
-omc crear --ide codium   # o --ide vscode|auto|none (none por defecto)
+omc crear --ide codium   # o --ide vscode|auto|none (none por defecto; solo dev, en prod usar --force para opencode terminal)
 ```
 
 Qué hace `Configurar VS Code / Codium`: genera `.vscode/{settings,extensions,launch,tasks}.json`
-desde `vscode-*.json.tpl` + `opencode.json` en raíz desde `opencode.json.tpl` (`$schema` `opencode.ai/config.json`, `instructions ["AGENTS.md"]`) con merge no destructivo (`.bak`, jsonc `//`, shallow listas sin dup). `settings` con `extraPaths` a `addons/`, `launch` F5 attach debugpy `5678`, `tasks` para `omc doctor/update/test/logs`. `opencode.json` con `AGENTS.md`, atajos `Ctrl+Esc` split / `Ctrl+Shift+Esc` nueva. Si hay `codium`/`code` y se elige instalar, corre `codium --install-extension` para `anomalyco.opencode` (recomendado siempre, primero) + `ms-python.python`, `pylance`, `ruff`, `vscode-json`, `vscode-docker`, `vscode-odoo` (Codium usa open-vsx equivalentes).
+desde `vscode-*.json.tpl` + `opencode.json` en raíz desde `opencode.json.tpl` (`$schema` `opencode.ai/config.json`, `instructions ["AGENTS.md"]`) con merge no destructivo (`.bak`, jsonc `//`, shallow listas sin dup). Solo en dev local (por proyecto); en prod VPS nunca genera `.vscode` ni instala extensiones — con `--force` genera **solo `opencode.json` en modo terminal** (sin IDE/extensión, advertencia). `settings` con `extraPaths` a `addons/`, `launch` F5 attach debugpy `5678`, `tasks` para `omc doctor/update/test/logs`. `opencode.json` con `AGENTS.md`, atajos `Ctrl+Esc` split / `Ctrl+Shift+Esc` nueva. Si hay `codium`/`code` y se elige instalar (solo dev), corre `codium --install-extension` para `anomalyco.opencode` (recomendado siempre, primero) + `ms-python.python`, `pylance`, `ruff`, `vscode-json`, `vscode-docker`, `vscode-odoo` (Codium usa open-vsx equivalentes).
 
 ```bash
 opencode              # TUI: en terminal integrado instala extensión anomalyco.opencode auto (Ctrl+Esc split)

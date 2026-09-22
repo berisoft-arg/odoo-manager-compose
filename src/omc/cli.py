@@ -36,7 +36,9 @@ def _add_crear_args(p):
     p.add_argument("--vcpus", type=float, default=None)
     p.add_argument("--ram-gb", type=float, default=None)
     p.add_argument("--ide", default="none", choices=["none", "auto", "codium", "vscode"],
-                   help="Configurar .vscode (none por defecto, auto=codium>code)")
+                   help="Configurar .vscode + opencode.json (solo dev; none por defecto)")
+    p.add_argument("--force", action="store_true",
+                   help="En prod VPS: generar solo opencode.json en modo terminal (sin .vscode/IDE)")
 
 
 def build_parser():
@@ -145,12 +147,14 @@ def build_parser():
                      help="IDE a configurar (default: submenú)")
     dev.add_argument("--instalar", action="store_true", help="Instalar extensiones (requiere code/codium)")
     dev.add_argument("--solo-generar", action="store_true", help="Solo generar .vscode sin instalar")
+    dev.add_argument("--force", action="store_true", help="En prod VPS: solo opencode.json terminal (sin IDE)")
     # alias compat
     ide = sub.add_parser("ide", help="Alias de dev")
     ide.add_argument("--proyecto", default=None)
     ide.add_argument("--ide", default=None, choices=["auto", "codium", "vscode"])
     ide.add_argument("--instalar", action="store_true")
     ide.add_argument("--solo-generar", action="store_true")
+    ide.add_argument("--force", action="store_true", help="En prod VPS: solo opencode.json terminal")
 
     return p
 
@@ -169,7 +173,7 @@ def _ejecutar_accion_menu(accion):
             addon=[], sin_addons=False, bundle=None, localizacion=None,
             deploy=False, sin_deploy=False, dominio=None, email=None, sin_nginx=False,
             staging=False, odoo_cpus=None, odoo_mem=None, db_cpus=None, db_mem=None,
-            rclone_remote=None, vcpus=None, ram_gb=None, ide="none", proyecto=None
+            rclone_remote=None, vcpus=None, ram_gb=None, ide="none", force=False, proyecto=None
         ))
         return
     # resto de acciones: monitor/github/proxy/migrar-vps/dev no necesitan proyecto si es --todo

@@ -29,6 +29,10 @@
 - **Fix**: menú captura `assets/images/menu.png` 598x433 con 13) Desarrollo (banner 1.1.0), comentario `src/omc/flows.py:2567` 1..13 + 0 Salir (14 items), licencia SPDX string `AGPL-3.0-only`.
 - **Docs**: `Manual §1.1` `.env` ignorado + `.env.ejemplo` sin `VPS_*` + `list_db=False` oculta `/web/database/manager`, `§5.7` `production` vs `ENTORNO=produccion`, `§7.3` snippet `resolver 127.0.0.11 valid=10s` dinámico vs clásico `upstream`.
 
+## [1.1.2] - 2026-09-22
+
+- **Dev prod-gating**: `opencode` siempre en dev (por proyecto, `.vscode` + `opencode.json` con `anomalyco.opencode`), nunca en prod VPS; en prod solo con `--force` genera `opencode.json` en modo terminal sin `.vscode`/IDE/extensión (advertencia).
+
 ## [Sin publicar]
 
 ## [1.0.0]

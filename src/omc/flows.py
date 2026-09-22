@@ -2323,13 +2323,27 @@ def _load_jsonc(path: Path) -> dict | None:
         return None
 
 
-def generar_vscode(salida: Path, mapping: dict, ide: str = "auto", instalar: bool = False) -> list:
-    """Genera .vscode/{settings,extensions,launch,tasks}.json + opencode.json con merge no destructivo."""
+def generar_vscode(salida: Path, mapping: dict, ide: str = "auto", instalar: bool = False, force: bool = False) -> list:
+    """Genera .vscode/{settings,extensions,launch,tasks}.json + opencode.json con merge no destructivo.
+
+    En prod (ENTORNO=produccion, VPS) solo genera opencode.json en modo terminal con --force; .vscode nunca en prod.
+    """
     salida = Path(salida)
+    es_prod = False
+    try:
+        es_prod = leer_env(salida).get("ENTORNO") == "produccion"
+    except Exception:  # noqa: BLE001
+        es_prod = mapping.get("ENTORNO") == "produccion"
+    if es_prod and not force:
+        print("  ⚠ prod (VPS): opencode/.vscode solo en dev; use --force para generar solo opencode.json en modo terminal (sin IDE/extensión)")
+        return []
+    # en prod con --force solo opencode.json, sin .vscode
+    solo_opencode = es_prod and force
     vs = salida / ".vscode"
-    vs.mkdir(parents=True, exist_ok=True)
+    if not solo_opencode:
+        vs.mkdir(parents=True, exist_ok=True)
     creados = []
-    # opencode.json en raíz (siempre, recomendado)
+    # opencode.json en raíz (siempre en dev, solo con --force en prod)
     try:
         oc_texto = render(cargar_template("opencode.json.tpl"), mapping)
         if sin_renderizar(oc_texto):
@@ -2360,6 +2374,10 @@ def generar_vscode(salida: Path, mapping: dict, ide: str = "auto", instalar: boo
                 creados.append("opencode.json (existe, no tocado)")
     except FileNotFoundError:
         pass
+    if solo_opencode:
+        # prod --force: solo opencode.json, informar
+        print("  → prod --force: generado solo opencode.json (modo terminal, sin .vscode ni extensiones)")
+        return creados
     pares = [
         ("vscode-settings.json.tpl", "settings.json"),
         ("vscode-extensions.json.tpl", "extensions.json"),
@@ -2444,10 +2462,18 @@ def run_dev(args=None):
     solo_generar = getattr(args, "solo_generar", False) if args is not None else False
     if ide_flag:
         env = leer_env(proj)
-        mapping = {"PROYECTO": proj.name, "ODOO_VERSION": env.get("ODOO_VERSION", "18")}
+        es_prod = env.get("ENTORNO") == "produccion"
+        force = bool(getattr(args, "force", False))
+        if es_prod and not force:
+            print("  ⚠ prod (VPS): opencode/.vscode solo en dev; use --force para generar solo opencode.json en modo terminal (sin IDE/extensión)")
+            return
+        mapping = {"PROYECTO": proj.name, "ODOO_VERSION": env.get("ODOO_VERSION", "18"), "ENTORNO": env.get("ENTORNO", "desarrollo")}
         ide_norm = "codium" if ide_flag == "codium" else "vscode" if ide_flag == "vscode" else "auto"
-        generar_vscode(proj, mapping, ide=ide_norm, instalar=instalar_flag and not solo_generar)
-        print(f"\n✓ .vscode generado en {proj}/.vscode  (ide={ide_norm})")
+        generar_vscode(proj, mapping, ide=ide_norm, instalar=instalar_flag and not solo_generar, force=force)
+        if es_prod and force:
+            print(f"\n✓ opencode.json generado en {proj}/opencode.json (prod --force, modo terminal sin .vscode)")
+        else:
+            print(f"\n✓ .vscode generado en {proj}/.vscode  (ide={ide_norm})")
         print("  Chrome: My Odoo Webkit https://chromewebstore.google.com/detail/my-odoo-webkit/fdohfkgekkoehlofibieijojjcmlbdok?hl=es")
         return
     # submenú interactivo
@@ -2483,6 +2509,16 @@ def run_dev(args=None):
         mapping = {"PROYECTO": proj.name, "ODOO_VERSION": env.get("ODOO_VERSION", "18"),
                    "MAILPIT_PORT": env.get("MAILPIT_PORT", "8025")}
         if choice == "1":
+            if env.get("ENTORNO") == "produccion":
+                print("  ⚠ prod (VPS): .vscode/IDE solo en dev local. ¿Generar solo opencode.json en modo terminal?")
+                if not (es_interactivo() and ask_si_no("¿Generar opencode.json con --force?", False)):
+                    print("  Cancelado (prod sin --force no genera .vscode)")
+                    continue
+                creados = generar_vscode(proj, {**mapping, "ENTORNO": "produccion"}, ide="auto", instalar=False, force=True)
+                print("\nvscode creados/merge (prod --force terminal):")
+                for c in creados:
+                    print(f"  - {c}")
+                continue
             pref = "auto"
             if es_interactivo():
                 pref_raw = ask_opcion(["Auto (codium > code)", "VSCodium (codium)", "VS Code (code)", "Solo generar (sin instalar)"], "IDE")
@@ -3550,17 +3586,19 @@ def crear_proyecto(args):
     (salida / ".gitignore").write_text(gitignore, encoding="utf-8")
     (salida / "AGENTS.md").write_text(
         render(cargar_template("agents-proyecto.md.tpl"), mapping), encoding="utf-8")
-    # --- IDE (.vscode) opcional: --ide codium|vscode|auto|none ---
+    # --- IDE (.vscode) opcional: --ide codium|vscode|auto|none (solo dev; prod solo con --force para opencode.json) ---
     ide_opt = getattr(args, "ide", "none")
+    force_opt = bool(getattr(args, "force", False))
     if ide_opt and ide_opt != "none":
         ide_norm = "codium" if ide_opt == "codium" else "vscode" if ide_opt == "vscode" else "auto"
-        creados_vs = generar_vscode(salida, mapping, ide=ide_norm, instalar=False)
-        print("\nIDE .vscode:")
-        for c in creados_vs:
-            print(f"  - {c}")
-        print("  Chrome: My Odoo Webkit https://chromewebstore.google.com/detail/my-odoo-webkit/fdohfkgekkoehlofibieijojjcmlbdok?hl=es")
-    elif es_interactivo() and not args.no_input and not args.sin_addons:
-        # pregunta opt-in solo en menú interactivo, no en CI
+        creados_vs = generar_vscode(salida, mapping, ide=ide_norm, instalar=False, force=force_opt)
+        if creados_vs:
+            print("\nIDE .vscode:")
+            for c in creados_vs:
+                print(f"  - {c}")
+            print("  Chrome: My Odoo Webkit https://chromewebstore.google.com/detail/my-odoo-webkit/fdohfkgekkoehlofibieijojjcmlbdok?hl=es")
+    elif es_interactivo() and not args.no_input and not args.sin_addons and entorno == "desarrollo":
+        # pregunta opt-in solo en menú interactivo dev (prod nunca)
         if ask_si_no("¿Configurar VS Code / Codium (.vscode)?", False):
             pref_raw = ask_opcion(["Auto (codium > code)", "VSCodium (codium)", "VS Code (code)", "Solo generar"], "IDE")
             pref = {"Auto (codium > code)": "auto", "VSCodium (codium)": "codium", "VS Code (code)": "vscode", "Solo generar": "auto"}.get(pref_raw, "auto")
