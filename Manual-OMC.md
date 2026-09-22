@@ -16,7 +16,7 @@
 
 1. [Qué es y qué genera](#1-qué-es-y-qué-genera)
 2. [Requisitos](#2-requisitos)
-3. [Inicio rápido (en tu máquina)](#3-inicio-rápido-en-tu-máquina)
+3. [Inicio rápido](#3-inicio-rápido)
 4. [El asistente paso a paso](#4-el-asistente-paso-a-paso)
 5. [Módulos: bundle, lista y terceros](#5-módulos-bundle-lista-y-terceros)
 6. [`omc addons` (referencia avanzada)](#6-omc-addons-referencia-avanzada)
@@ -107,7 +107,7 @@ addons_path = /mnt/extra-addons/custom,/mnt/extra-addons,/mnt/extra-addons/adhoc
 
 ---
 
-## 3. Inicio rápido (en tu máquina)
+## 3. Inicio rápido
 
 ```bash
 omc     # sin flags abre el menú
