@@ -44,7 +44,7 @@ pip install odoo-manager-compose --break-system-packages
 omc --version  # abre el menú 1-12
 ```
 
-> Manual completo: [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker) y [§17 VPS](Manual-OMC.md#17-vps-con-deploy-vps-sh).
+> Manual completo: [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker) y [§17 VPS](Manual-OMC.md#17-vps-producción).
 
 ## Uso rápido: el menú básico (1-12, 0 sale)
 
@@ -71,8 +71,7 @@ src/omc/versions/   # 17.env (pg15), 18.env / 19.env (pg16)
 src/omc/data/       # catálogo de addons, localizaciones, bundle ejemplo
 src/omc/monitor/    # monitor Flask solo-lectura (lo sirve `omc-monitor`)
 tests/              # suite pytest
-requirements*.txt   # runtime (+migración) para pip install en venv
-deploy-vps.sh       # instalación nativa en VPS (venv + systemd)
+requirements*.txt   # runtime
 Manual-OMC.md        # documentación completa
 CHANGELOG.md         # historial
 ```

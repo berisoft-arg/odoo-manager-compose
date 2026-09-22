@@ -1,6 +1,6 @@
 # Odoo Manager Compose — dependencias de runtime (una única versión).
-# Instalar en venv:  pip install -r requirements.txt && pip install --no-deps .
-# (deploy-vps.sh lo hace solo). Los paquetes de migración OCA
+# Instalar: pipx install odoo-manager-compose  (o pip install ... --break-system-packages)
+# (o en venv: pip install -r requirements.txt && pip install --no-deps .). Los paquetes de migración OCA
 # (odoo-module-migrator, openupgradelib) se ofrecen instalar a demanda
 # al correr `omc migrar` si faltan.
 flask>=3.0

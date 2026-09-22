@@ -30,7 +30,7 @@
 14. [Monitor web](#14-monitor-web-src-omc-monitor-app-py-flask-solo-lectura)
 15. [Instalación (venv, sin Docker)](#15-instalación-venv-sin-docker)
 16. [Migración entre versiones Odoo](#16-migración-entre-versiones-odoo-oca)
-17. [VPS con deploy-vps.sh](#17-vps-con-deploy-vps-sh)
+17. [VPS (producción)](#17-vps-producción)
 
 ---
 
@@ -707,7 +707,7 @@ pipx venv (~/.local/pipx/venvs/odoo-manager-compose)  # código OMC (con git: /o
 ```
 
 > Con otro usuario, `~` en vez de `/root`. Raíces custom:
-> `OMC_HOME=... OMC_PROJECTS=... ./deploy-vps.sh`.
+> `OMC_HOME=... OMC_PROJECTS=... pipx install odoo-manager-compose`.
 
 ```text
 src/omc/                      # paquete (cli, core, tui, github, gitutils, manifest,
@@ -716,9 +716,8 @@ src/omc/templates/            # compose dev/prod/migrate, odoo.conf, nginx, Dock
 src/omc/versions/             # 17.env (pg15), 18.env / 19.env (pg16)
 src/omc/data/                 # addons-catalog.json, localizaciones.json, addons-bundle.ejemplo.json
 pyproject.toml                # pip install odoo-manager-compose -> comandos omc, omc-monitor
-requirements.txt              # runtime (flask + gunicorn) para `pip install -r` en venv
-deploy-vps.sh                 # instalación nativa en VPS (venv + systemd, idempotente)
-tests/                        # suite pytest (85 tests)
+requirements.txt              # runtime (flask + gunicorn)
+tests/                        # suite pytest
 src/omc/monitor/              # monitor Flask solo-lectura (lo sirve `omc-monitor`)
 Manual-OMC.md                 # este manual
 ```
@@ -859,7 +858,7 @@ correría con los binarios origen y no migraría nada) y `scripts/migrate_db.sh`
 
 ---
 
-## 17. VPS con deploy-vps.sh
+## 17. VPS (producción)
 
 **Instalación express en un VPS nuevo:**
 
@@ -874,13 +873,7 @@ Para VPS con monitor systemd, luego: `omc` se encarga de `/opt/omc` y `/opt` (su
 
 Raíces custom: `OMC_HOME=... OMC_PROJECTS=... pipx install odoo-manager-compose`.
 
-El script es idempotente: verifica prerrequisitos (Python ≥3.10, `python3-venv`, git,
-docker + plugin compose, systemd de usuario), deja escribibles `/opt/omc` (datos)
-y `/opt` (proyectos) con sudo **una sola vez** (uso diario sin sudo), crea
-`~/.venv/omc`, instala `requirements.txt` + el paquete, deja symlinks en
-`~/.local/bin`, genera token si no le pasás `ODOO_WEB_TOKEN` (queda guardado en
-el servicio; se consulta en la opción 6, nunca se imprime), y habilita
-`omc-monitor` (`systemctl --user`).
+Prerrequisitos (una sola vez): Python ≥3.10, `python3-venv`, `git`, Docker + plugin compose y systemd de usuario. La primera ejecución de `omc` deja escribibles `/opt/omc` (datos) y `/opt` (proyectos) con sudo **una sola vez** (uso diario sin sudo).
 
 Raíz de proyectos (`list`/`doctor`/`elegir`/monitor la escanean):
 `$OMC_PROJECTS` → `$OMC_HOME` (compat) → `~/odoo-manager-compose` existente →
@@ -888,13 +881,31 @@ Raíz de proyectos (`list`/`doctor`/`elegir`/monitor la escanean):
 `crear` genera en `<proyectos>/<nombre>` (pregunta `Carpeta del proyecto` en el
 menú; `--salida` manda; sin permiso sale con la instrucción de sudo único).
 
-Re-deploy (`git pull && ./deploy-vps.sh`): es seguro re-ejecutar. Reutiliza el
-token del monitor existente (rota solo si exportás `ODOO_WEB_TOKEN` nuevo),
-limpia sola la función `omc()` del experimento Docker si quedó en `~/.bashrc`,
-y agrega `~/.local/bin` a tu `PATH` si falta (abrí shell nuevo después).
+Actualizar: `pipx upgrade odoo-manager-compose` o `pip install --upgrade odoo-manager-compose --break-system-packages`.
 
-Variables: `REPO_DIR`, `VENV_DIR`, `OMC_HOME`, `OMC_PROJECTS`,
-`MONITOR_PORT` (8765), `MONITOR_HOST` (127.0.0.1), `ODOO_WEB_TOKEN`.
+Variables: `OMC_HOME`, `OMC_PROJECTS`, `MONITOR_PORT` (8765), `MONITOR_HOST` (127.0.0.1), `ODOO_WEB_TOKEN`.
+
+Monitor systemd (si lo querés persistente):
+
+```bash
+mkdir -p ~/.config/systemd/user
+cat > ~/.config/systemd/user/omc-monitor.service <<'EOF'
+[Unit]
+Description=Odoo Manager Compose - Monitor web (solo lectura)
+After=network.target
+[Service]
+Type=simple
+Environment=OMC_HOME=/opt/omc
+Environment=OMC_PROJECTS=/opt
+Environment=ODOO_WEB_TOKEN=$(python3 -c 'import secrets;print(secrets.token_urlsafe(32))')
+ExecStart=%h/.local/bin/omc-monitor --host 127.0.0.1 --port 8765
+Restart=on-failure
+[Install]
+WantedBy=default.target
+EOF
+chmod 600 ~/.config/systemd/user/omc-monitor.service
+systemctl --user daemon-reload && systemctl --user enable --now omc-monitor
+```
 
 ```bash
 sudo loginctl enable-linger $USER   # arrancar el monitor sin login
