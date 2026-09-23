@@ -724,11 +724,12 @@ git por apt, `odoo.conf` sin `:ro`, sin `logfile` en 19): ver [CHANGELOG.md](CHA
 ## 13. Dónde vive (estándar VPS)
 
 ```text
-pipx venv (~/.local/pipx/venvs/odoo-manager-compose)  # código OMC (con git: /opt/odoo-manager-compose)
-~/.local/bin/omc                                      # comando
+pipx venv (~/.local/pipx/venvs/odoo-manager-compose)  # código OMC por usuario (con git: /opt/odoo-manager-compose)
+pipx global (/opt/pipx/venvs/odoo-manager-compose)    # o código global (--global con PIPX_HOME=/opt/pipx)
+/usr/local/bin/omc                                    # comando global (visible para root + cualquier usuario)
 /root/.config/systemd/user/ # servicio omc-monitor (con el token, permiso 600)
 /opt/omc                    # datos OMC: OMC_HOME (catálogos editables, estado)
-/opt/<nombre>               # proyectos: OMC_PROJECTS (ej. /opt/mi-proyecto)
+/opt/<nombre>               # proyectos: OMC_PROJECTS (ej. /opt/mi-proyecto, siempre ahí vengas de /opt, /home o /tmp)
 /root/.config/omc/          # GitHub (token opcional 0600, jamás en proyectos)
 ```
 
@@ -806,6 +807,35 @@ pipx install odoo-manager-compose
 pip install odoo-manager-compose --break-system-packages
 omc --version  # abre el menú 1-13
 ```
+
+### 15.1 Global para root + cualquier usuario (VPS con root y admin Odoo)
+
+`pipx` deja `omc` en `~/.local/bin` (solo lo ve quien instaló: `root` en `/` da
+`command 'omc' not found`). `sudo pip --break` lo deja en `/usr/local/bin`
+(lo ven todos, como `rocketdoo` con `pip solo`). Ambas vías son oficiales:
+
+```bash
+# A) pipx global (aislado, recomendado): venv en /opt/pipx, bin en /usr/local/bin
+sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install --global odoo-manager-compose
+# B) pip global (como rocketdoo): system-wide, sin venv
+sudo pip install odoo-manager-compose --break-system-packages  # -> /usr/local/bin/omc
+# C) sin reinstalar (usa tu pipx actual de ~/.local): symlink global one-liner
+sudo ln -sf /home/<admin>/.local/bin/omc /usr/local/bin/omc
+sudo ln -sf /home/<admin>/.local/bin/omc-monitor /usr/local/bin/omc-monitor
+# D) por usuario (sin sudo global): pipx ensurepath + relogin
+pipx ensurepath && exec $SHELL -l  # añade ~/.local/bin al PATH
+```
+
+Verificación (desde `/`, `/opt`, `/home`, como root y como admin):
+
+```bash
+which omc  # esperado: /usr/local/bin/omc (global) o ~/.local/bin/omc (por usuario)
+omc --version  # 1.1.2
+```
+
+> `omc` funciona desde cualquier directorio; los proyectos siempre van a
+> `/opt/<nombre>` (`$OMC_PROJECTS`, default `/opt`), nunca al `cwd`.
+> Si `omc sync` dice `no veo ./addons`, pasá `--proyecto /opt/mi_proyecto`.
 
 Para desarrollo:
 

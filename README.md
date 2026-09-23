@@ -45,6 +45,23 @@ pip install odoo-manager-compose --break-system-packages
 omc --version  # abre el menú 1-13
 ```
 
+Global para root + cualquier usuario (VPS con root y usuario admin Odoo):
+`pipx` deja `omc` en `~/.local/bin` (solo lo ve quien instaló); `sudo pip --break`
+lo deja en `/usr/local/bin` (lo ven todos, como `rocketdoo`). Para global con `pipx`:
+
+```bash
+sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install --global odoo-manager-compose
+# o sin reinstalar (usa tu pipx actual):
+sudo ln -sf ~/.local/bin/omc /usr/local/bin/omc
+sudo ln -sf ~/.local/bin/omc-monitor /usr/local/bin/omc-monitor
+# o por usuario: pipx ensurepath && exec $SHELL -l
+which omc  # debe dar /usr/local/bin/omc desde root y desde admin
+```
+
+> Detalle y pros/contras en [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker).
+> `omc` funciona desde cualquier directorio (`/opt`, `/home`, `/tmp`); los proyectos
+> siempre se escriben en `/opt/<nombre>` (`$OMC_PROJECTS`, default `/opt`).
+
 > Manual completo: [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker) y [§17 VPS](Manual-OMC.md#17-vps-producción).
 
 ## Uso rápido: el menú básico (1-13, 0 sale)
@@ -87,11 +104,11 @@ CHANGELOG.md         # historial
 ### Dónde vive (estándar VPS)
 
 ```text
-pipx venv (~/.local/pipx/venvs/odoo-manager-compose)  # código OMC (con git: /opt/odoo-manager-compose)
-~/.local/bin/omc                                      # comando
+pipx venv (~/.local/pipx/venvs/odoo-manager-compose)  # código OMC (global: /opt/pipx/venvs/... + /usr/local/bin/omc)
+/usr/local/bin/omc                                    # comando global (root + cualquier usuario)
 ~/.config/systemd/user/     # servicio omc-monitor (con el token, permiso 600)
 /opt/omc                    # datos OMC: OMC_HOME (catálogos editables, estado)
-/opt/<nombre>               # proyectos: OMC_PROJECTS (ej. /opt/mi-proyecto)
+/opt/<nombre>               # proyectos: OMC_PROJECTS (ej. /opt/mi-proyecto, siempre ahí)
 ~/.config/omc/              # GitHub (token opcional 0600, jamás en proyectos)
 ```
 
