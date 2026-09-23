@@ -26,7 +26,7 @@
 10. [Puertos y múltiples instancias](#10-puertos-y-múltiples-instancias)
 11. [Docker útil](#11-docker-útil)
 12. [Solución de problemas](#12-solución-de-problemas)
-13. [Dónde vive (estándar VPS)](#13-dónde-vive-estándar-vps)
+13. [Dónde vive](#13-dónde-vive)
 14. [Monitor web](#14-monitor-web-src-omc-monitor-app-py-flask-solo-lectura)
 15. [Instalación (venv, sin Docker)](#15-instalación-venv-sin-docker)
 16. [Migración entre versiones Odoo](#16-migración-entre-versiones-odoo-oca)
@@ -407,7 +407,8 @@ omc proxy init                                   # crea /opt/proxy + red omc-pro
 omc web --proxy --proyecto /opt/tienda --dominio tienda.com --email yo@x.com [--staging]
 omc web --standalone --proyecto /opt/tienda --dominio ...   # nginx propio (un solo HTTPS por host)
 # o interactivo: omc web --proyecto .   (pregunta modo; default proxy si está
-# inicializado, si no standalone)
+# inicializado, si no standalone; staging: ENTER=no=cert real trusted)
+# Si elegís proxy sin proxy inicializado, el menú ofrece inicializarlo.
 ```
 
 Cómo funciona: `omc proxy init` (idempotente) genera el proyecto `proxy`
@@ -779,7 +780,7 @@ omc-monitor --host 0.0.0.0 --token MI_TOKEN_LARGO  # nunca sin token ni sin TLS
 
 ```bash
 pipx install odoo-manager-compose
-# o
+# o (pip ≥23.1; con pip 22 de Ubuntu 22.04 / Python 3.10: sin --break)
 pip install odoo-manager-compose --break-system-packages
 omc --version  # abre el menú 1-13
 ```
@@ -793,7 +794,7 @@ omc --version  # abre el menú 1-13
 ```bash
 # A) pipx global (aislado, recomendado): venv en /opt/pipx, bin en /usr/local/bin
 sudo PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin pipx install --global odoo-manager-compose
-# B) pip global (como rocketdoo): system-wide, sin venv
+# B) pip global (como rocketdoo): system-wide, sin venv (pip 22: sin --break)
 sudo pip install odoo-manager-compose --break-system-packages  # -> /usr/local/bin/omc
 # C) sin reinstalar (usa tu pipx actual de ~/.local): symlink global one-liner
 sudo ln -sf /home/<admin>/.local/bin/omc /usr/local/bin/omc
@@ -806,7 +807,7 @@ Verificación (desde `/`, `/opt`, `/home`, como root y como admin):
 
 ```bash
 which omc  # esperado: /usr/local/bin/omc (global) o ~/.local/bin/omc (por usuario)
-omc --version  # 1.1.2
+omc --version  # 1.1.4
 ```
 
 > `omc` funciona desde cualquier directorio; los proyectos siempre van a
@@ -896,7 +897,7 @@ correría con los binarios origen y no migraría nada) y `scripts/migrate_db.sh`
 
 ```bash
 pipx install odoo-manager-compose
-# o
+# o (pip ≥23.1; con pip 22 de Ubuntu 22.04 / Python 3.10: sin --break)
 pip install odoo-manager-compose --break-system-packages
 omc --version  # abre el menú 1-13
 ```
@@ -913,7 +914,7 @@ Raíz de proyectos (`list`/`doctor`/`elegir`/monitor la escanean):
 `crear` genera en `<proyectos>/<nombre>` (pregunta `Carpeta del proyecto` en el
 menú; `--salida` manda; sin permiso sale con la instrucción de sudo único).
 
-Actualizar: `pipx upgrade odoo-manager-compose` o `pip install --upgrade odoo-manager-compose --break-system-packages`.
+Actualizar: `pipx upgrade odoo-manager-compose` o `pip install --upgrade odoo-manager-compose --break-system-packages` (pip 22: sin `--break`).
 
 Variables: `OMC_HOME`, `OMC_PROJECTS`, `MONITOR_PORT` (8765), `MONITOR_HOST` (127.0.0.1), `ODOO_WEB_TOKEN`.
 

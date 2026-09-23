@@ -40,7 +40,7 @@ Python 3.10+, Git, Docker con plugin compose. Para repos privados en https:
 
 ```bash
 pipx install odoo-manager-compose
-# o
+# o (pip ≥23.1; con pip 22 de Ubuntu 22.04 / Python 3.10: sin --break)
 pip install odoo-manager-compose --break-system-packages
 omc --version  # abre el menú 1-13
 ```
@@ -58,11 +58,9 @@ sudo ln -sf ~/.local/bin/omc-monitor /usr/local/bin/omc-monitor
 which omc  # debe dar /usr/local/bin/omc desde root y desde admin
 ```
 
-> Detalle y pros/contras en [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker).
+> Detalle en [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker) y [§17 VPS](Manual-OMC.md#17-vps-producción).
 > `omc` funciona desde cualquier directorio (`/opt`, `/home`, `/tmp`); los proyectos
 > siempre se escriben en `/opt/<nombre>` (`$OMC_PROJECTS`, default `/opt`).
-
-> Manual completo: [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker) y [§17 VPS](Manual-OMC.md#17-vps-producción).
 
 ## Uso rápido: el menú básico (1-13, 0 sale)
 
@@ -72,7 +70,7 @@ omc                 # abre el menú
 
 ![Menú principal OMC — opciones 1-13 y 0 Salir](assets/images/menu.png)
 
-*Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup → `13` dev (VS Code/Codium + My Odoo Webkit + opencode).*
+*Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup → `13` dev (VS Code/Codium + My Odoo Webkit + opencode). El menú agrupa por fase (Crear / Publicar / Operar) sin renumerar.*
 
 ```bash
 # Desarrollo (opcional, recomendado siempre — solo dev; en prod VPS solo con --force para opencode terminal sin IDE)

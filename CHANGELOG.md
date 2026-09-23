@@ -44,6 +44,8 @@
 
 ## [Sin publicar]
 
+- **Menú agrupado + proxy guiado**: menú por fases (Crear / Publicar / Operar) sin renumerar + pie con flujo habitual; `web --proxy` sin proxy inicializado ofrece `proxy init` en menú (antes abortaba al menú); pausa `Enter para volver` tras errores; staging/modo explícitos (`ENTER=no=real`). Tests + `Manual §3/§7.3/§12`.
+
 ## [1.0.0]
 
 Primera versión documentada: asistente + menú en loop, creación/operación de
