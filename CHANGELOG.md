@@ -56,6 +56,10 @@
 - **Selector solo entornos**: `¿En qué proyecto?` nunca ofrece `proxy [infraestructura]` (filtro por `ENTORNO` en `elegir_proyecto`; explícito `--proyecto` a infra se rechaza; `migrar-vps --todo` filtra por `ENTORNO`); `logs` sigue permisivo. `Manual §4.6`.
 - **Checklist título plano + monitor ESC**: título sin fondo en checklist (igual que menú central); menú 6 espera `ESC` para copiar el token (vista del servicio y token nuevo). `Manual §14`.
 
+## [1.1.8] - 2026-09-24
+
+- **Cosmética Bootstrap + menú 01-11**: monitor con paleta docs Bootstrap (header morado `#712CF9`, claro/blanco y oscuro `#212529`) y dropdown Claro/Oscuro/Auto con iconos SVG; menú principal `01 - 11`/`00` sin negrita ni paréntesis. `Manual §14`.
+
 ## [Sin publicar]
 
 ## [1.0.0]
