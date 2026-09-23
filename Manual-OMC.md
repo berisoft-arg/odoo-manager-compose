@@ -176,6 +176,9 @@ Avanzado sin menú: `--deploy` / `--sin-deploy`.
 
 ### 4.6 Solo instalador (proyecto existente)
 
+El prompt `¿En qué proyecto?` solo lista entornos desplegados, nunca `proxy [infraestructura]`
+(con `--proyecto` explícito a infra se rechaza con mensaje claro).
+
 Avanzado sin menú (lo normal es la opción 2 del menú):
 
 ```bash
@@ -742,6 +745,7 @@ Desde el **menú opción 6**: muestra la URL, el puerto y el token **reales del
 servicio** (leídos del unit systemd; si no hay servicio, los pide) y después
 ofrece frente/fondo/stop. La URL y el token **solo** se muestran acá, nunca en
 el arranque ni en el resumen del deploy (ahí solo se indica dónde verlos).
+Tras mostrar el token espera `ESC` para seguir (copialo tranquilo; `Enter` no avanza).
 Avanzado sin menú:
 
 ```bash

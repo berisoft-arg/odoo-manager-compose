@@ -1874,3 +1874,158 @@ def test_paso_despliegue_sin_tty_no_espera(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr(F, "esperar_esc_volver", _boom)
     paso_despliegue(p, 8069, auto=True)
     assert "✓ Desplegado" in capsys.readouterr().out
+
+
+def test_elegir_proyecto_excluye_infra(monkeypatch, tmp_path, capsys):
+    """El prompt solo lista entornos (prod + legado sin .env), nunca proxy."""
+    from omc.flows import elegir_proyecto
+    (tmp_path / "odoo").mkdir()
+    (tmp_path / "odoo" / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (tmp_path / "odoo" / ".env").write_text("ENTORNO=produccion\n", encoding="utf-8")
+    (tmp_path / "legado").mkdir()
+    (tmp_path / "legado" / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (tmp_path / "proxy").mkdir()
+    (tmp_path / "proxy" / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (tmp_path / "proxy" / ".env").write_text("ENTORNO=infraestructura\n", encoding="utf-8")
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    monkeypatch.chdir(tmp_path)  # cwd neutro (sin compose): solo lista
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "1")
+    elegido = elegir_proyecto()
+    out = capsys.readouterr().out
+    assert "infraestructura" not in out and "proxy" not in out
+    assert "[produccion]" in out
+    assert elegido == (tmp_path / "legado").resolve()
+
+
+def test_resolver_proyecto_rechaza_infra(tmp_path):
+    """--proyecto /opt/proxy explícito se rechaza con mensaje claro."""
+    import pytest
+    from omc.flows import _resolver_proyecto
+    p = tmp_path / "proxy"
+    p.mkdir()
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (p / ".env").write_text("ENTORNO=infraestructura\n", encoding="utf-8")
+    with pytest.raises(SystemExit) as e:
+        _resolver_proyecto(SimpleNamespace(proyecto=str(p)))
+    assert "infraestructura" in str(e.value.code)
+
+
+def test_migrar_vps_todo_excluye_infra_renombrada(monkeypatch, tmp_path, capsys):
+    """--todo excluye infra por ENTORNO aunque no se llame proxy."""
+    import tarfile
+    from omc.flows import run_migrar_vps
+    base = tmp_path
+    for name, entorno in (("a", "produccion"), ("gateway", "infraestructura")):
+        p = base / name
+        p.mkdir()
+        (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+        (p / ".env").write_text(f"ENTORNO={entorno}\n", encoding="utf-8")
+        (p / "scripts").mkdir()
+        (p / "scripts" / "backup.sh").write_text("#!/bin/sh\necho ok\n", encoding="utf-8")
+        (p / "backups").mkdir()
+        (p / "backups" / "full_backup_midb_day1.tar.gz").write_text("x", encoding="utf-8")
+        (p / "addons-bundle.json").write_text("{}", encoding="utf-8")
+        (p / "addons").mkdir()
+        (p / "addons" / "repos.json").write_text("[]", encoding="utf-8")
+        (p / "config").mkdir()
+        (p / "config" / "odoo.conf").write_text("[x]\n", encoding="utf-8")
+    monkeypatch.setenv("OMC_PROJECTS", str(base))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    import subprocess as _sp
+
+    def _fake(cmd, **k):
+        if "psql" in cmd:
+            return SimpleNamespace(returncode=0, stdout="midb\n")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(_sp, "run", _fake)
+    run_migrar_vps(SimpleNamespace(proyecto=None, todo=True, consistente=False))
+    outs = list(base.glob("migrar_*.tar.gz"))
+    assert len(outs) == 1
+    with tarfile.open(outs[0]) as tf:
+        names = tf.getnames()
+        assert any("a/full_backup" in n for n in names)
+        assert not any("gateway" in n for n in names)
+    capsys.readouterr()
+
+
+def test_checklist_titulo_plano(monkeypatch, capsys):
+    """Checklist: título plano sin fondo; solo el foco se resalta."""
+    import sys as _sys
+    import omc.tui as T
+    monkeypatch.setattr(T.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(T.sys.stdin, "fileno", lambda: 0)
+    monkeypatch.setattr(T.sys.stdout, "isatty", lambda: True)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    import os as _os
+    import shutil as _shutil
+    monkeypatch.setattr(_shutil, "get_terminal_size",
+                        lambda: _os.terminal_size((80, 24)))
+
+    class _FakeTermios:
+        TCSADRAIN = 1
+
+        @staticmethod
+        def tcgetattr(fd):
+            return "old"
+
+        @staticmethod
+        def tcsetattr(fd, when, old):
+            return None
+
+    class _FakeTty:
+        @staticmethod
+        def setcbreak(fd):
+            return None
+
+    class _FakeSelect:
+        @staticmethod
+        def select(r, w, x, *a):
+            return (r, [], [])
+
+    monkeypatch.setitem(_sys.modules, "termios", _FakeTermios)
+    monkeypatch.setitem(_sys.modules, "tty", _FakeTty)
+    monkeypatch.setitem(_sys.modules, "select", _FakeSelect)
+    monkeypatch.setattr(T.os, "read", lambda fd, n: b"\r")
+    assert T.checklist("Elige módulos", ["m1", "m2"], marcados=["m1"]) == ["m1"]
+    out = capsys.readouterr().out
+    assert "\x1b[1;37;44m Elige módulos" not in out
+    assert "Elige módulos" in out
+
+
+def test_run_monitor_espera_esc_para_copiar(monkeypatch, tmp_path, capsys):
+    """Vista del servicio: muestra token y espera ESC antes del submenú."""
+    import omc.flows as F
+    monkeypatch.setenv("HOME", str(tmp_path))
+    _unit_monitor(tmp_path)
+    monkeypatch.setattr("omc.flows.subprocess.run",
+                        lambda *a, **k: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "4")  # Volver
+    esperas = []
+    monkeypatch.setattr(F, "esperar_esc_volver",
+                        lambda *a, **k: esperas.append(1) or True)
+    run_monitor(SimpleNamespace())
+    out = capsys.readouterr().out
+    assert "TOK-SERVICIO-123" in out
+    assert esperas == [1]
+
+
+def test_run_monitor_sin_tty_no_espera(monkeypatch, tmp_path, capsys):
+    """Sin tty no bloquea esperando tecla (CI, --no-input)."""
+    import omc.flows as F
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setattr("omc.flows.subprocess.run",
+                        lambda *a, **k: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(F, "es_interactivo", lambda: False)
+
+    def _boom(*a, **k):
+        raise AssertionError("sin tty no debe esperar tecla")
+
+    monkeypatch.setattr(F, "esperar_esc_volver", _boom)
+    run_monitor(SimpleNamespace())
+    out = capsys.readouterr().out
+    assert "token:" in out

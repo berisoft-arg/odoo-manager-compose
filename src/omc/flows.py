@@ -1972,6 +1972,12 @@ def run_sync(args):
     Para Odoo ya desplegado al que se le agregan módulos de repos.
     """
     proyecto = find_proyecto(args.proyecto)
+    try:
+        _es_infra = leer_env(proyecto).get("ENTORNO") == "infraestructura"
+    except Exception:  # noqa: BLE001
+        _es_infra = False
+    if _es_infra:
+        sys.exit(f"{proyecto} es infraestructura (proxy), no un entorno desplegado.")
 
     def foto_estado():
         fotos = {}
@@ -2357,8 +2363,18 @@ def run_list_catalog(args):
     )
 
 
-def elegir_proyecto() -> Path:
-    """Menú de proyectos existentes (dirs con docker-compose.yml)."""
+def elegir_proyecto(solo_desplegados: bool = True) -> Path:
+    """Menú de proyectos existentes (dirs con docker-compose.yml).
+
+    Con solo_desplegados (default) excluye infraestructura (proxy): solo
+    entornos desplegados. Sin .env o sin ENTORNO se incluye (legados).
+    """
+    def _es_infra(c: Path) -> bool:
+        try:
+            return leer_env(c).get("ENTORNO") == "infraestructura"
+        except Exception:  # noqa: BLE001
+            return False
+
     cands: list[Path] = []
     try:
         if (Path.cwd() / "docker-compose.yml").exists():
@@ -2371,6 +2387,8 @@ def elegir_proyecto() -> Path:
                 cands.append(d.resolve())
     except OSError:
         pass
+    if solo_desplegados:
+        cands = [c for c in cands if not _es_infra(c)]
     if not cands:
         return Path(ask_texto("Ruta del proyecto", ".") or ".").resolve()
     labels = []
@@ -2560,6 +2578,12 @@ def run_dev(args=None):
                     proj = _elegir()
         except Exception:  # noqa: BLE001
             proj = Path.cwd()
+    try:
+        _es_infra = leer_env(proj).get("ENTORNO") == "infraestructura"
+    except Exception:  # noqa: BLE001
+        _es_infra = False
+    if _es_infra:
+        sys.exit(f"{proj} es infraestructura (proxy), no un entorno desplegado.")
     # si es instalación directa sin submenú (ej --ide codium --instalar)
     ide_flag = getattr(args, "ide", None) if args is not None else None
     instalar_flag = getattr(args, "instalar", False) if args is not None else False
@@ -2899,16 +2923,27 @@ def run_doctor(args):
         print("\nDoctor: todo OK.")
 
 
-def _resolver_proyecto(args) -> Path:
-    """Proyecto desde --proyecto o cwd (exige docker-compose.yml)."""
+def _resolver_proyecto(args, solo_desplegados: bool = True) -> Path:
+    """Proyecto desde --proyecto o cwd (exige docker-compose.yml).
+
+    Con solo_desplegados (default) rechaza infraestructura (proxy): no es
+    un entorno desplegado. Sin .env o sin ENTORNO se acepta (legados).
+    """
     if getattr(args, "proyecto", None):
         p = Path(args.proyecto).resolve()
         if not (p / "docker-compose.yml").exists():
             sys.exit(f"{p} no parece un proyecto (sin docker-compose.yml).")
-        return p
-    p = find_proyecto()
-    if not (p / "docker-compose.yml").exists():
-        sys.exit(f"{p} no parece un proyecto (sin docker-compose.yml).")
+    else:
+        p = find_proyecto()
+        if not (p / "docker-compose.yml").exists():
+            sys.exit(f"{p} no parece un proyecto (sin docker-compose.yml).")
+    if solo_desplegados:
+        try:
+            es_infra = leer_env(p).get("ENTORNO") == "infraestructura"
+        except Exception:  # noqa: BLE001
+            es_infra = False
+        if es_infra:
+            sys.exit(f"{p} es infraestructura (proxy), no un entorno desplegado.")
     return p
 
 
@@ -2994,6 +3029,8 @@ def run_monitor(args):
         print(f"\nMonitor del servicio: {estado}")
         print(f"  URL:   http://{info['host']}:{info['port']}")
         print(f"  Token: {info['token']}")
+        if es_interactivo():
+            esperar_esc_volver("Token a la vista — copialo. Pulsa ESC para seguir...")
     modo = ask_opcion(
         "Monitor web (solo lectura: contenedores + logs + métricas)",
         ["Ver en esta terminal (Ctrl+C lo detiene)", "Fondo (libera la terminal)",
@@ -3023,6 +3060,8 @@ def run_monitor(args):
         print(f"\nAbra http://localhost:{port}  (token: {token})")
     else:
         print(f"\nAbra http://TU_IP:{port}  (token: {token})")
+    if es_interactivo():
+        esperar_esc_volver("Token a la vista — copialo. Pulsa ESC para seguir...")
     cmd = [*base_cmd, "--port", str(port), "--host", host, "--token", token]
     if fondo:
         subprocess.run([*cmd, "--fondo"])
@@ -3099,7 +3138,8 @@ def _elegir_bd(proj: Path, db_arg, que: str) -> str:
 
 def run_logs(args):
     """Logs del proyecto (follow). Corto para el ciclo típico."""
-    proj = _resolver_proyecto(args)
+    # Permisivo con infra: ver logs del nginx del proxy es uso legítimo.
+    proj = _resolver_proyecto(args, solo_desplegados=False)
     servicio = getattr(args, "servicio", None) or "odoo"
     tail = getattr(args, "tail", None) or 200
     print(f"Logs de {servicio} (Ctrl+C para salir).")
@@ -3159,8 +3199,14 @@ def run_migrar_vps(args):
                        if d.is_dir() and (d / "docker-compose.yml").exists()]
         except OSError:
             targets = []
-        # excluir proxy (infra)
-        targets = [p for p in targets if p.name != "proxy"]
+        # excluir infraestructura (proxy, aunque tenga otro nombre)
+        def _es_infra(p: Path) -> bool:
+            try:
+                return leer_env(p).get("ENTORNO") == "infraestructura"
+            except Exception:  # noqa: BLE001
+                return False
+
+        targets = [p for p in targets if not _es_infra(p)]
         if not targets:
             print(f"No hay proyectos en {base}")
             return

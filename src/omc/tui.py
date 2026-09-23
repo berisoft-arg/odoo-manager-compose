@@ -389,7 +389,7 @@ def checklist(titulo_txt: str, items: list, marcados=None, pie: str = None) -> l
                 cur_pie = f"↑/↓ mueve · Espacio marca · a todos/n ninguno · Enter confirma · ESC sale · Pág {cur_page}/{tot_pages} ({offset+1}-{min(offset+page_size,n)}/{n})"
             else:
                 cur_pie = "↑/↓ mueve · Espacio marca · a todos/n ninguno · Enter confirma · ESC sale"
-        return marco(titulo_txt, lineas, pie=cur_pie)
+        return marco(titulo_txt, lineas, pie=cur_pie, resaltar_titulo=False)
 
     altura = 0
     try:
