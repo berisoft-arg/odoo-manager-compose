@@ -47,9 +47,11 @@
 - **Menú agrupado + proxy guiado**: menú por fases (Crear / Publicar / Operar) sin renumerar + pie con flujo habitual; `web --proxy` sin proxy inicializado ofrece `proxy init` en menú (antes abortaba al menú); pausa `Enter para volver` tras errores; staging/modo explícitos (`ENTER=no=real`). Tests + `Manual §3/§7.3/§12`.
 - **Menú título plano + deps con checklist**: título sin fondo azul ni foco inicial (solo la opción con foco al navegar); `run_deps` y `elegir_repo_guiado` usan el mismo `checklist` paginado de repos/módulos (con fallback textual). Tests.
 
-## [Sin publicar]
+## [1.1.6] - 2026-09-24
 
 - **Deploy espera ESC**: tras el `pulling`/`build` muestra resumen (`ps` + URL/logs o hints de puertos/`429`) y espera `ESC` para volver al menú (`Enter` no vuelve); sin tty no espera. `Manual §4.5`.
+
+## [Sin publicar]
 
 ## [1.0.0]
 
