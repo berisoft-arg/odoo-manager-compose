@@ -773,8 +773,9 @@ omc-monitor --host 0.0.0.0 --token MI_TOKEN_LARGO  # nunca sin token ni sin TLS
 - Pestañas: **Proyectos** (versión, puerto, dominio, `x/y en marcha` + visor de logs por
   servicio con auto-refresh) y **Contenedores** (`docker ps` global con auto-refresh).
 - Una sola landing **Odoo Manager Compose — Monitor**: proyectos + contenedores + logs
-  (sin pestañas). Tema claro/oscuro: marfil `#ECDFD2`/gris `#CCCACC`/negro y blanco,
-  primario `#5F3475`, acento `#893172`.
+  (sin pestañas). Tema claro/oscuro estilo docs Bootstrap (header morado `#712CF9`;
+  claro fondo blanco, oscuro `#212529`) con selector Claro/Oscuro/Auto (icono sol/luna,
+  sigue al sistema en Auto).
 - **Métricas** por proyecto (auto 20s, todo solo-lectura): conexiones PG vs `max_connections`,
   lentas >5s, bloqueos, tamaño por BD + crecimiento ~24h (historial local), cron activos por BD,
   CPU/RAM por contenedor (`docker stats`), disco + backups, último backup (fecha/tamaño/db.dump),

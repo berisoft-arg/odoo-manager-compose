@@ -52,8 +52,8 @@ def titulo(texto: str) -> str:
 
 
 def numero(texto: str) -> str:
-    """Números de opción del menú (con su espacio inicial adentro)."""
-    return c(texto, _NEGRITA, _AZUL_MARINO)
+    """Números de opción del menú (con su espacio inicial adentro, sin negrita)."""
+    return c(texto, _AZUL_MARINO)
 
 
 def tenue(texto: str) -> str:
@@ -62,8 +62,8 @@ def tenue(texto: str) -> str:
 
 
 def texto_menu(texto: str) -> str:
-    """Texto de opción del menú (siempre negrita)."""
-    return c(texto, _NEGRITA, _BLANCO)
+    """Texto de opción del menú (sin negrita; el foco lleva fondo azul)."""
+    return c(texto, _BLANCO)
 
 
 def ok(texto: str) -> str:
@@ -212,14 +212,17 @@ def elegir_interactivo(opciones: list, titulo_txt: str = "¿Qué quiere hacer?",
                 # Mantener formato original (numero azul, texto blanco)
                 # Re-parsear "  1) Texto" para no perder colores previos si los trae
                 # Si lab trae ANSI, respetarlo; si no, pintarlo normal
-                if lab.strip().startswith("0)"):
+                if lab.strip().startswith("00 -"):
                     lineas.append(tenue(f"  {lab.strip()}"))
                 else:
-                    # Separar número y resto si viene como "  1) Texto"
+                    # Separar número y resto si viene como "01 - Texto"
                     # Fallback simple: pintar como texto_menu si no tiene ANSI
                     if "\x1b[" not in lab:
-                        # Intentar separar "1) Texto"
-                        if ")" in lab:
+                        # Intentar separar "01 - Texto" (o "1) Texto" legacy)
+                        if " - " in lab:
+                            pref, rest = lab.split(" - ", 1)
+                            pref = pref.strip() + " -"
+                        elif ")" in lab:
                             pref = lab.split(")")[0] + ")"
                             rest = lab.split(")", 1)[1]
                         else:
@@ -259,7 +262,7 @@ def elegir_interactivo(opciones: list, titulo_txt: str = "¿Qué quiere hacer?",
             elif ch in (b"\r", b"\n"):
                 return idx if idx != -1 else 0
             elif ch == b"\x1b":  # ESC solo → salir
-                return n - 1 if opciones[-1].strip().startswith("0)") or "Salir" in opciones[-1] else n - 1
+                return n - 1
             elif ch in (b"q", b"Q"):
                 return n - 1
             elif len(ch) == 1 and 48 <= ch[0] <= 57:  # dígito 0-9

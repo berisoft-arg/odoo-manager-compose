@@ -2728,9 +2728,9 @@ def menu_principal() -> str:
     ]
     print(banner_omc(PKG_VERSION))
     labels = [v for _k, v in acciones if _k != "salir"]
-    # Opciones navegables: 1..13 + 0 Salir (14 items, 0 navegable)
-    nav_items = [f"{i}) {lab}" for i, lab in enumerate(labels, 1)] + ["0) Salir"]
-    pie_menu = ("↑/↓ + Enter · número + Enter · 0 sale | "
+    # Opciones navegables: 01..13 + 00 Salir (14 items, 00 navegable)
+    nav_items = [f"{i:02d} - {lab}" for i, lab in enumerate(labels, 1)] + ["00 - Salir"]
+    pie_menu = ("↑/↓ + Enter · número + Enter · 00 sale | "
                 "Habitual: 1 crear → 2 módulos → 3 AR → 8 backup")
     # Intento con flechas si hay tty real
     try:
@@ -2750,16 +2750,16 @@ def menu_principal() -> str:
             filas.append(tenue("  — Publicar [prod] —"))
         if i == 6:
             filas.append(tenue("  — Operar —"))
-        filas.append(f"  {numero(f'{i})')} {texto_menu(lab)}")
-    filas.append(tenue("  0) Salir"))
+        filas.append(f"  {numero(f'{i:02d} -')} {texto_menu(lab)}")
+    filas.append(tenue("  00 - Salir"))
     print(marco(
         "¿Qué quiere hacer?",
         filas,
         pie=pie_menu,
         resaltar_titulo=False,
     ))
-    r = ask_texto(f"Elige [0-{len(labels)}]", "1")
-    if r == "0":
+    r = ask_texto(f"Elige [00-{len(labels):02d}]", "01")
+    if r.strip() == "0" or r.strip() == "00":
         return "salir"
     if r.isdigit() and 1 <= int(r) <= len(labels):
         return acciones[int(r) - 1][0]

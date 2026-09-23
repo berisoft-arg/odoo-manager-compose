@@ -213,7 +213,7 @@ def test_menu_sin_color_fuera_de_tty(monkeypatch, capsys, tmp_path):
     assert menu_principal() == "crear"  # sin tty: default sin leer input
     out = capsys.readouterr().out
     assert "\033[" not in out
-    assert "=== Odoo Manager Compose" in out and " 11)" in out
+    assert "=== Odoo Manager Compose" in out and "11 -" in out
 
 
 def test_banner_marco_seccion_planos_sin_tty(monkeypatch):

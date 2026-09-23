@@ -5,15 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Odoo Manager Compose — Monitor</title>
 <style>
-:root{ /* claro marfil/gris + violeta + magenta */
-  --bg:#ECDFD2; --card:#FFFFFF; --txt:#111111; --mut:#6E6A70;
-  --line:#CCCACC; --acc:#5F3475; --acc-tx:#FFFFFF; --fuc:#893172;
-  --log-bg:#17131c; --log-tx:#efe6f2;
+:root{ /* claro estilo docs Bootstrap */
+  --bg:#FFFFFF; --card:#F8F9FA; --txt:#212529; --mut:#6C757D;
+  --line:#DEE2E6; --acc:#712CF9; --acc-tx:#FFFFFF; --fuc:#6528B7;
+  --log-bg:#212529; --log-tx:#E9ECEF;
 }
-[data-theme="dark"]{ /* negro + blanco, mismos acentos */
-  --bg:#0E0E10; --card:#17171B; --txt:#FFFFFF; --mut:#CCCACC;
-  --line:#2C2C31; --acc:#5F3475; --acc-tx:#FFFFFF; --fuc:#893172;
-  --log-bg:#000000; --log-tx:#efe6f2;
+[data-theme="dark"]{ /* oscuro estilo docs Bootstrap */
+  --bg:#212529; --card:#2B3035; --txt:#DEE2E6; --mut:#ADB5BD;
+  --line:#495057; --acc:#712CF9; --acc-tx:#FFFFFF; --fuc:#A885FA;
+  --log-bg:#000000; --log-tx:#E9ECEF;
 }
 body{font-family:system-ui,sans-serif;margin:0;background:var(--bg);color:var(--txt)}
 header{background:var(--acc);color:#fff;padding:12px 18px;display:flex;gap:10px;align-items:center}
@@ -23,7 +23,14 @@ header .sp{flex:1}
 main{padding:16px;max-width:1100px;margin:auto}
 .card{background:var(--card);border:1px solid var(--line);border-radius:8px;padding:14px;margin-bottom:12px}
 h2{font-size:14px;letter-spacing:1px;text-transform:uppercase;color:var(--acc);margin:0 0 10px}
-[data-theme="dark"] h2{color:#c9a8e0}
+[data-theme="dark"] h2{color:var(--fuc)}
+svg.ic{width:16px;height:16px;vertical-align:-3px}
+.dd{position:relative}
+#menuTema{position:absolute;right:0;top:110%;background:var(--card);border:1px solid var(--line);border-radius:6px;display:none;min-width:150px;z-index:10;box-shadow:0 4px 12px rgba(0,0,0,.15)}
+#menuTema.open{display:block}
+#menuTema button{display:flex;gap:8px;align-items:center;width:100%;background:none;border:0;color:var(--txt);padding:8px 12px;cursor:pointer;font-size:13px;text-align:left}
+#menuTema button:hover{background:var(--line)}
+#menuTema button.active{font-weight:700}
 table{border-collapse:collapse;width:100%}td,th{border:1px solid var(--line);padding:6px 8px;font-size:13px;text-align:left}
 th{color:var(--mut);font-weight:600}
 pre{background:var(--log-bg);color:var(--log-tx);font-size:12px;padding:10px;border-radius:6px;max-height:420px;overflow:auto;white-space:pre-wrap}
@@ -41,7 +48,8 @@ button.lin:hover{border-color:var(--fuc);color:var(--fuc)}
 </head>
 <body>
 <header><div class="t"><b>Odoo Manager Compose</b><span>MONITOR</span></div>
-<span class="sp"></span><button id="tema" onclick="cambiarTema()">🌙/☀️</button></header>
+<span class="sp"></span><div class="dd"><button id="tema" onclick="document.getElementById('menuTema').classList.toggle('open')" title="Tema"><span id="icoTema"></span></button><div id="menuTema"><button data-tema-valor="light" onclick="fijarTema('light')"><svg class="ic"><use href="#i-sol"/></svg>Claro</button><button data-tema-valor="dark" onclick="fijarTema('dark')"><svg class="ic"><use href="#i-luna"/></svg>Oscuro</button><button data-tema-valor="auto" onclick="fijarTema('auto')"><svg class="ic"><use href="#i-auto"/></svg>Auto</button></div></div></header>
+<svg width="0" height="0" style="position:absolute"><symbol id="i-sol" viewBox="0 0 16 16"><path d="M8 12a4 4 0 1 0 0-8 4 4 0 0 0 0 8M8 0a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 0m0 13a.5.5 0 0 1 .5.5v2a.5.5 0 0 1-1 0v-2A.5.5 0 0 1 8 13m8-5a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2a.5.5 0 0 1 .5.5M3 8a.5.5 0 0 1-.5.5h-2a.5.5 0 0 1 0-1h2A.5.5 0 0 1 3 8m10.657-5.657a.5.5 0 0 1 0 .707l-1.414 1.415a.5.5 0 1 1-.707-.708l1.414-1.414a.5.5 0 0 1 .707 0m-9.193 9.193a.5.5 0 0 1 0 .707L3.05 13.657a.5.5 0 0 1-.707-.707l1.414-1.414a.5.5 0 0 1 .707 0m9.193 2.121a.5.5 0 0 1-.707 0l-1.414-1.414a.5.5 0 0 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .707M4.464 4.465a.5.5 0 0 1-.707 0L2.343 3.05a.5.5 0 1 1 .707-.707l1.414 1.414a.5.5 0 0 1 0 .708"/></symbol><symbol id="i-luna" viewBox="0 0 16 16"><path d="M6 .278a.77.77 0 0 1 .08.858 7.2 7.2 0 0 0-.878 3.46c0 4.021 3.278 7.277 7.318 7.277q.792-.001 1.533-.16a.79.79 0 0 1 .81.316.73.73 0 0 1-.031.893A8.35 8.35 0 0 1 8.344 16C3.734 16 0 12.286 0 7.71 0 4.266 2.114 1.312 5.124.06A.75.75 0 0 1 6 .278"/><path d="M10.794 3.148a.217.217 0 0 1 .412 0l.387 1.162c.173.518.579.924 1.097 1.097l1.162.387a.217.217 0 0 1 0 .412l-1.162.387a1.73 1.73 0 0 0-1.097 1.097l-.387 1.162a.217.217 0 0 1-.412 0l-.387-1.162A1.73 1.73 0 0 0 9.31 6.593l-1.162-.387a.217.217 0 0 1 0-.412l1.162-.387a1.73 1.73 0 0 0 1.097-1.097zM13.863.099a.145.145 0 0 1 .274 0l.258.774c.115.346.386.617.732.732l.774.258a.145.145 0 0 1 0 .274l-.774.258a1.16 1.16 0 0 0-.732.732l-.258.774a.145.145 0 0 1-.274 0l-.258-.774a1.16 1.16 0 0 0-.732-.732l-.774-.258a.145.145 0 0 1 0-.274l.774-.258c.346-.115.617-.386.732-.732z"/></symbol><symbol id="i-auto" viewBox="0 0 16 16"><path d="M8 15A7 7 0 1 0 8 1zm0 1A8 8 0 1 1 8 0a8 8 0 0 1 0 16"/></symbol></svg>
 <main>
 <div id="login" class="card" style="display:none">
 <h3>Token</h3>
@@ -74,8 +82,12 @@ button.lin:hover{border-color:var(--fuc);color:var(--fuc)}
 <script>
 window.onerror=function(m){var d=document.getElementById("app");d.style.display="block";d.innerHTML="<div class='card'><b>Error:</b> "+m+"<br>Haz Ctrl+Shift+R.</div>"};
 let TOK="";try{TOK=localStorage.getItem("otok")||""}catch(e){}
-function temaInit(){let t="light";try{t=localStorage.getItem("otheme")||(matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light")}catch(e){}document.documentElement.dataset.theme=t}
-function cambiarTema(){let t=document.documentElement.dataset.theme=="dark"?"light":"dark";document.documentElement.dataset.theme=t;try{localStorage.setItem("otheme",t)}catch(e){}}
+function temaActual(){try{return localStorage.getItem("otheme")||"auto"}catch(e){return "auto"}}
+function temaEfectivo(t){if(t==="auto"){try{return matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light"}catch(e){return "light"}}return t}
+function pintarIcono(t){var el=document.getElementById("icoTema");if(el)el.innerHTML='<svg class="ic"><use href="#i-'+(t==="light"?"sol":t==="dark"?"luna":"auto")+'"/></svg>'}
+function aplicarTema(t){document.documentElement.dataset.theme=temaEfectivo(t);pintarIcono(t);document.querySelectorAll("[data-tema-valor]").forEach(function(b){b.classList.toggle("active",b.dataset.temaValor===t)})}
+function fijarTema(t){try{localStorage.setItem("otheme",t)}catch(e){}aplicarTema(t);document.getElementById("menuTema").classList.remove("open")}
+function temaInit(){aplicarTema(temaActual());try{matchMedia("(prefers-color-scheme: dark)").addEventListener("change",function(){if(temaActual()==="auto")aplicarTema("auto")})}catch(e){}document.addEventListener("click",function(e){if(!e.target.closest(".dd"))document.getElementById("menuTema").classList.remove("open")})}
 temaInit();
 function api(p){return fetch(p,{headers:{"X-Token":TOK}}).then(r=>{if(r.status==401)throw "token";return r.json()})}
 function guardarTok(){TOK=document.getElementById("tok").value;try{localStorage.setItem("otok",TOK)}catch(e){}init()}

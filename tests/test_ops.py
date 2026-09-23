@@ -217,7 +217,7 @@ def test_menu_12_es_migrar_vps(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda *a, **k: "12")
     assert menu_principal() == "migrar_vps"
     out = capsys.readouterr().out
-    assert " 12)" in out and "Migrar instancia a otro VPS" in out
+    assert "12 -" in out and "Migrar instancia a otro VPS" in out
 
 
 def test_cli_migrar_vps_flags():
@@ -369,7 +369,7 @@ def test_menu_principal_muestra_tip_monitor(monkeypatch, capsys):
     # Tip removido por diseño
     assert "Tip:" not in out
     assert "opción 6" not in out
-    assert " 11)" in out
+    assert "11 -" in out
 
 
 def test_menu_opcion_11_es_proxy(monkeypatch, capsys):
@@ -378,7 +378,7 @@ def test_menu_opcion_11_es_proxy(monkeypatch, capsys):
     monkeypatch.setattr("builtins.input", lambda *a, **k: "11")
     assert menu_principal() == "proxy"
     out = capsys.readouterr().out
-    assert " 11)" in out and "Proxy multinstancia" in out
+    assert "11 -" in out and "Proxy multinstancia" in out
 
 
 def test_run_proxy_init_crea_proyecto(monkeypatch, tmp_path, capsys):
@@ -1614,9 +1614,10 @@ def test_menu_agrupado_muestra_fases_y_flujo(monkeypatch, capsys):
     assert "— Publicar [prod] —" in out
     assert "— Operar —" in out
     assert "Habitual: 1 crear" in out
-    # numeración intacta (sin renumerar)
-    assert " 11)" in out and "Proxy multinstancia" in out
-    assert " 12)" in out and "Migrar instancia a otro VPS" in out
+    # numeración intacta en dos dígitos sin paréntesis (sin renumerar)
+    assert "11 -" in out and "Proxy multinstancia" in out
+    assert "12 -" in out and "Migrar instancia a otro VPS" in out
+    assert "00 - Salir" in out
 
 
 def test_web_proxy_sin_init_ofrece_init(monkeypatch, tmp_path, capsys):
@@ -2029,3 +2030,24 @@ def test_run_monitor_sin_tty_no_espera(monkeypatch, tmp_path, capsys):
     run_monitor(SimpleNamespace())
     out = capsys.readouterr().out
     assert "token:" in out
+
+
+def test_menu_dos_digitos_sin_negrita(monkeypatch, capsys):
+    """Formato 01 - 11 sin paréntesis ni negrita; 00 sale."""
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "00")
+    assert menu_principal() == "salir"
+    out = capsys.readouterr().out
+    assert "01 -" in out and "09 -" in out and "11 -" in out
+    assert "00 - Salir" in out
+    assert "\x1b[1;34m" not in out and "\x1b[1;37m" not in out
+
+
+def test_menu_numero_sin_negrita_con_tty(monkeypatch):
+    """Con tty: números en azul sin negrita."""
+    from omc import tui
+    monkeypatch.setattr("sys.stdout.isatty", lambda: True)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    assert tui.numero("01 -") == "\033[34m01 -\033[0m"
+    assert tui.texto_menu("Crear") == "\033[37mCrear\033[0m"
