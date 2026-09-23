@@ -350,7 +350,7 @@ def generar_script_migracion_bd(proyecto: Path, db_name: str, target_ver: str) -
     out.write_text(
         "#!/bin/bash\n"
         f"# Migración BD a Odoo {target_ver} con OpenUpgrade (rama {branch}).\n"
-        "# Generado por omc. Revisar antes de ejecutar.\n"
+        "# Generado por OMC. Revisar antes de ejecutar.\n"
         "# Usa el override docker-compose.migrate.yml (binarios destino).\n"
         "set -e\n"
         f'DB="${{1:-{db_name}}}"\n'

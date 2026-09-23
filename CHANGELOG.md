@@ -37,6 +37,11 @@
 
 - **Docs: global + Dónde vive**: instalación global para root + cualquier usuario con `pipx` (`PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin --global`) y con `pip` (`sudo pip install --break` → `/usr/local/bin`), `§15.1` + verificación desde `/`, `/opt`, `/home`; `§13 Dónde vive` simplificado a proyectos en `/opt/<nombre>` por convención Odoo (`/opt/odoo`).
 
+## [1.1.4] - 2026-09-23
+
+- **Fix: `list_db = True` siempre** (dev y prod, manager por IP:puerto sin nginx; https sigue con `return 404`): `odoo.conf.tpl:12` + tests + `Manual §1.1/§3` (tras crear la BD pasar a `False` + restart).
+- **Marca OMC**: `Generado por omc` → `OMC` en templates (`odoo.conf`, `docker-compose.*`, `env.ejemplo`, `agents-proyecto`, `vscode-settings`, `Dockerfile`, `compose-migrate`) + `flows.py` stub + `migrate.py`.
+
 ## [Sin publicar]
 
 ## [1.0.0]

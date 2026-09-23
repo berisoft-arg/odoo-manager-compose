@@ -15,6 +15,6 @@
         "**/addons/adhoc": true,
         "**/__pycache__": true
     },
-    // {{PROYECTO}} — Odoo {{ODOO_VERSION}} generado por omc
+    // {{PROYECTO}} — Odoo {{ODOO_VERSION}} generado por OMC
     "odoo.version": "{{ODOO_VERSION}}"
 }

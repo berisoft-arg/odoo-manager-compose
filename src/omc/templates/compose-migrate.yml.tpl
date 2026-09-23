@@ -1,5 +1,5 @@
 # Override de migración OpenUpgrade — Proyecto: {{PROYECTO}} | Destino: Odoo {{ODOO_VERSION_DESTINO}}
-# Generado por omc (se regenera en cada `migrar`, no tocar a mano).
+# Generado por OMC (se regenera en cada `migrar`, no tocar a mano).
 # La migración DEBE correr con los binarios de la versión destino contra la BD origen:
 #   docker compose -f docker-compose.yml -f docker-compose.migrate.yml run --rm odoo -- \
 #     --database <BD> --update all --stop-after-init --load=base,web,openupgrade_framework

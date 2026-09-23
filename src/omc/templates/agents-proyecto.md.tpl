@@ -1,4 +1,4 @@
-# {{PROYECTO}} — Odoo {{ODOO_VERSION}} (generado por omc, para agentes)
+# {{PROYECTO}} — Odoo {{ODOO_VERSION}} (generado por OMC, para agentes)
 
 ## Comandos (correr desde la raíz del proyecto)
 

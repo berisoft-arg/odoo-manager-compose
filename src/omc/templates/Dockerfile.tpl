@@ -1,4 +1,4 @@
-# Generado por el asistente Odoo | {{PROYECTO}} Odoo {{ODOO_VERSION}}
+# Generado por OMC | {{PROYECTO}} Odoo {{ODOO_VERSION}}
 FROM {{ODOO_IMAGE}}
 USER root
 # 1) Sistema SIEMPRE antes del pip (orden vital para localizaciones AR):

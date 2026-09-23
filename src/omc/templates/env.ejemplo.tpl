@@ -1,4 +1,4 @@
-# {{PROYECTO}} | Odoo {{ODOO_VERSION}} | generado por omc (ejemplo: copiar a .env y completar)
+# {{PROYECTO}} | Odoo {{ODOO_VERSION}} | generado por OMC (ejemplo: copiar a .env y completar)
 ENTORNO={{ENTORNO}}
 ODOO_VERSION={{ODOO_VERSION}}
 ODOO_IMAGE={{ODOO_IMAGE}}

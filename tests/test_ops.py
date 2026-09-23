@@ -1312,10 +1312,10 @@ def test_generar_odoo_conf_usa_limites_del_reparto():
     assert "limit_memory_hard = 222" in conf
     conf_dflt = generar_odoo_conf("produccion", {})
     assert "limit_memory_soft = 2147483648" in conf_dflt  # fallback defaults Odoo
-    assert "list_db = False" in conf_dflt  # gestor de BD oculto en prod
+    assert "list_db = True" in conf_dflt  # manager por IP:puerto en prod (https bloqueado por nginx)
     conf_dev = generar_odoo_conf("desarrollo", {})
     assert "limit_memory" not in conf_dev and "workers = 0" in conf_dev
-    assert "list_db = False" in conf_dev  # también en dev
+    assert "list_db = True" in conf_dev  # también en dev
     assert "smtp_server = mailpit" in conf_dev and "smtp_port = 1025" in conf_dev
 
 

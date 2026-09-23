@@ -105,7 +105,7 @@ from .addonsops import (
 )
 
 STUB_ADDONS_TPL = """#!/usr/bin/env python3
-# Stub generado por omc {ver}: delega en el paquete instalado.
+# Stub generado por OMC {ver}: delega en el paquete instalado.
 # Uso: ./odoo-addons.py <subcomando> [flags]  (equivale a: omc addons ...)
 import sys
 from pathlib import Path

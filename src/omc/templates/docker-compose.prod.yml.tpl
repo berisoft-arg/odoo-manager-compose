@@ -1,4 +1,4 @@
-# Proyecto: {{PROYECTO}} | Entorno: produccion | Odoo {{ODOO_VERSION}} | Generado por omc
+# Proyecto: {{PROYECTO}} | Entorno: produccion | Odoo {{ODOO_VERSION}} | Generado por OMC
 services:
   db:
     image: {{POSTGRES_IMAGE}}

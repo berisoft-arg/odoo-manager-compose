@@ -47,7 +47,7 @@ mi-proyecto/
   docker-compose.yml        # db (postgres) + odoo (+ nginx/certbot en prod con dominio)
   .env                      # versiones, passwords, puertos, tuning PG, límites, dominio (ignorado en git)
   .env.ejemplo              # plantilla sin secretos (sin VPS_*/secrets, copiar a .env y completar; commitear solo este)
-  config/odoo.conf          # addons_path múltiple, workers, proxy_mode si hay nginx, list_db = False (oculta /web/database/manager y selector BD)
+  config/odoo.conf          # addons_path múltiple, workers, proxy_mode si hay nginx, list_db = True (manager por IP:puerto; tras crear la BD pasalo a False)
   nginx/nginx.conf          # solo prod con dominio
   letsencrypt/ certbot-www/ # solo prod con dominio
   scripts/
@@ -120,6 +120,10 @@ omc     # sin flags abre el menú
 *Opción 1 pide: 1) Nombre  2) Entorno  3) Versión  4) Puertos (validados)  5) Passwords  6) ¿Desplegar? Al terminar vuelve al menú: los módulos NO se descargan acá. Flujo habitual: 1 (crear) → 2 (descargar módulos con bundle o lista, rama X.0 automática) → 3 (localización AR si la necesitas: deja m2crypto/SECLEVEL + ofrece aplicar con Dockerfile + rebuild).*
 
 Abrir `http://localhost:PUERTO` y ver logs con `docker compose logs -f odoo`.
+
+> Primera vez: `config/odoo.conf` viene con `list_db = True` para que puedas crear la BD
+> por `http://IP:PUERTO/web/database/manager` (sin nginx). Tras crearla, pasalo a
+> `list_db = False` y hacé `docker compose restart odoo` (seguridad prod).
 
 Limpieza para reprobar (conserva imágenes):
 

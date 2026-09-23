@@ -1,4 +1,4 @@
-; Proyecto: {{PROYECTO}} | Entorno: {{ENTORNO}} | Generado por omc
+; Proyecto: {{PROYECTO}} | Entorno: {{ENTORNO}} | Generado por OMC
 [options]
 ; El helper agrega aquí cada repo (sin symlinks): /mnt/extra-addons/<subdir>/<repo>
 addons_path = {{ADDONS_PATH}}
@@ -9,7 +9,7 @@ db_port = 5432
 db_user = odoo
 db_password = {{PG_PASSWORD}}
 db_maxconn = 64
-list_db = False
+list_db = True
 workers = {{WORKERS}}
 {{EXTRA_OPCIONES}}
 ; Sin logfile = log a stdout (ideal para `docker compose logs`)
