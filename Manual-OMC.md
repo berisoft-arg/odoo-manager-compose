@@ -721,38 +721,9 @@ git por apt, `odoo.conf` sin `:ro`, sin `logfile` en 19): ver [CHANGELOG.md](CHA
 
 ---
 
-## 13. Dónde vive (estándar VPS)
+## 13. Dónde vive
 
-```text
-pipx venv (~/.local/pipx/venvs/odoo-manager-compose)  # código OMC por usuario (con git: /opt/odoo-manager-compose)
-pipx global (/opt/pipx/venvs/odoo-manager-compose)    # o código global (--global con PIPX_HOME=/opt/pipx)
-/usr/local/bin/omc                                    # comando global (visible para root + cualquier usuario)
-/root/.config/systemd/user/ # servicio omc-monitor (con el token, permiso 600)
-/opt/omc                    # datos OMC: OMC_HOME (catálogos editables, estado)
-/opt/<nombre>               # proyectos: OMC_PROJECTS (ej. /opt/mi-proyecto, siempre ahí vengas de /opt, /home o /tmp)
-/root/.config/omc/          # GitHub (token opcional 0600, jamás en proyectos)
-```
-
-> Con otro usuario, `~` en vez de `/root`. Raíces custom:
-> `OMC_HOME=... OMC_PROJECTS=... pipx install odoo-manager-compose`.
-
-```text
-src/omc/                      # paquete (cli, core, tui, github, gitutils, manifest,
-                              #          addonsops, addons_cli, compose, flows, migrate, webapp)
-src/omc/templates/            # compose dev/prod/migrate, odoo.conf, nginx, Dockerfile, backup/restore, README, vscode-*.json.tpl, opencode.json.tpl, agents-proyecto.md.tpl
-src/omc/versions/             # 17.env (pg15), 18.env / 19.env (pg16)
-src/omc/data/                 # addons-catalog.json, localizaciones.json, addons-bundle.ejemplo.json
-pyproject.toml                # pip install odoo-manager-compose -> comandos omc, omc-monitor
-requirements.txt              # runtime (flask + gunicorn)
-tests/                        # suite pytest
-src/omc/monitor/              # monitor Flask solo-lectura (lo sirve `omc-monitor`)
-Manual-OMC.md                 # este manual
-```
-
-> Los JSON de `src/omc/data/` son los defaults empaquetados. Si creas
-> `$OMC_HOME/addons-catalog.json` (default `/opt/omc`; o te lo genera
-> `omc addons catalog-add`), esa copia manda: es tu capa editable y no se
-> pisa al actualizar el paquete.
+Los proyectos se crean en `/opt/<nombre>` (ej. `/opt/mi_proyecto`) por convención Odoo (`/opt/odoo`). Ver `omc crear --salida` para otra ruta.
 
 ---
 

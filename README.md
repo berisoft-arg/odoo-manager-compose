@@ -101,16 +101,9 @@ Manual-OMC.md        # documentación completa
 CHANGELOG.md         # historial
 ```
 
-### Dónde vive (estándar VPS)
+### Dónde vive
 
-```text
-pipx venv (~/.local/pipx/venvs/odoo-manager-compose)  # código OMC (global: /opt/pipx/venvs/... + /usr/local/bin/omc)
-/usr/local/bin/omc                                    # comando global (root + cualquier usuario)
-~/.config/systemd/user/     # servicio omc-monitor (con el token, permiso 600)
-/opt/omc                    # datos OMC: OMC_HOME (catálogos editables, estado)
-/opt/<nombre>               # proyectos: OMC_PROJECTS (ej. /opt/mi-proyecto, siempre ahí)
-~/.config/omc/              # GitHub (token opcional 0600, jamás en proyectos)
-```
+Los proyectos se crean en `/opt/<nombre>` (ej. `/opt/mi_proyecto`) por convención Odoo (`/opt/odoo`). Ver `omc crear --salida` para otra ruta.
 
 ## Licencia
 
