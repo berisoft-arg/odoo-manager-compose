@@ -117,7 +117,7 @@ omc     # sin flags abre el menú
 
 ![Menú principal OMC — opciones 1-13 y 0 Salir](assets/images/menu.png)
 
-*Opción 1 pide: 1) Nombre  2) Entorno  3) Versión  4) Puertos (validados)  5) Passwords  6) ¿Desplegar? Al terminar vuelve al menú: los módulos NO se descargan acá. Flujo habitual: 1 (crear) → 2 (descargar módulos con bundle o lista, rama X.0 automática) → 3 (localización AR si la necesitas: deja m2crypto/SECLEVEL + ofrece aplicar con Dockerfile + rebuild).*
+*Opción 1 pide: 1) Nombre  2) Entorno  3) Versión  4) Puertos (validados)  5) Passwords  6) ¿Desplegar? Al terminar vuelve al menú: los módulos NO se descargan acá. Flujo habitual: 1 (crear) → 2 (descargar módulos con bundle o lista, rama X.0 automática) → 3 (localización AR si la necesitas: deja m2crypto/SECLEVEL + ofrece aplicar con Dockerfile + rebuild). El menú agrupa por fase (Crear / Publicar [prod] / Operar) sin renumerar: 1-13 + 0 Sale.*
 
 Abrir `http://localhost:PUERTO` y ver logs con `docker compose logs -f odoo`.
 
@@ -425,7 +425,7 @@ cd /opt/proxy && docker compose run --rm certbot renew && docker compose exec ng
 
 Reglas duras (fallan limpio, sin escribir a medias):
 
-- Sin proxy inicializado: `omc proxy init` primero.
+- Sin proxy inicializado: en menú se ofrece `¿Inicializar proxy central ahora?` (con `--no-input` aborta con `corre omc proxy init primero`).
 - Proyecto con nginx local: quitarlo o usar `--standalone` (un solo 80/443 por host).
 - 80/443 ocupados (traefik u otro nginx): el proxy no levanta; liberar o no usar proxy.
 - El sitio odoo se levanta **antes** del primer reload (así el site responde
@@ -719,6 +719,7 @@ docker compose exec db pg_dump -U odoo postgres > backup.sql
 | Proxy no levanta: `Bind 0.0.0.0:80/443 failed` | Otro publicador (traefik, otro nginx) | Un solo 80/443 por host: liberar o no usar proxy |
 | Un site en 502, el resto OK | Su odoo caído | Aislamiento por diseño (resolver+variable): levantar ese proyecto, el proxy no se toca |
 | Cert fallido en `web --proxy` | DNS o puerto 80 | Queda día-1 HTTP; reintentar cuando resuelva (con `--staging` primero si dudás) |
+| Elegí proxy (multiinstancia) y volvió al menú | Faltaba `omc proxy init` | El menú lo ofrece e inicializa; en `--no-input` aborta con la instrucción |
 
 Filas ya resueltas en plantillas/código (pg `-d postgres`, `cron_name`, PEP 668,
 git por apt, `odoo.conf` sin `:ro`, sin `logfile` en 19): ver [CHANGELOG.md](CHANGELOG.md).

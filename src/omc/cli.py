@@ -237,6 +237,11 @@ def _menu_loop():
             # sys.exit(msg) de la acción: mostrar y volver al menú, no salir
             if e.code not in (None, 0):
                 print(e.code)
+                if es_interactivo():
+                    try:
+                        input("Enter para volver al menú...")
+                    except (EOFError, KeyboardInterrupt):
+                        print()
         except Exception as e:  # noqa: BLE001 - cualquier fallo vuelve al menú
             print(f"⚠ Falló la acción: {e}")
 

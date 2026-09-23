@@ -900,7 +900,14 @@ def modo_configurar_web_proxy(args, salida, dominio: str, email: str, staging: b
     salida = Path(salida).resolve()
     proxy_root = (projects_home() / PROXY_PROJECT).resolve()
     if not (proxy_root / "docker-compose.yml").exists():
-        sys.exit(f"No hay proxy central en {proxy_root} (corre `omc proxy init` primero).")
+        if es_interactivo() and not getattr(args, "no_input", False):
+            if ask_si_no(f"¿Inicializar proxy central ahora? ({proxy_root} + red omc-proxy)", True):
+                run_proxy_init()
+            else:
+                sys.exit(f"No hay proxy central en {proxy_root} (corre `omc proxy init` primero).")
+        else:
+            sys.exit(f"No hay proxy central en {proxy_root} (corre `omc proxy init` primero). "
+                     f"Verificá con: ls {proxy_root}/docker-compose.yml)")
     odoo_host = f"{salida.name.lower()}-odoo"
     # 1) proxy arriba (si 80/443 los tiene otro, falla acá con mensaje claro)
     r = subprocess.run(["docker", "compose", "up", "-d"], cwd=str(proxy_root))
@@ -972,15 +979,19 @@ def modo_configurar_web(args):
             sys.exit("Sin email Let's Encrypt no emite. Abortado.")
         if (
             not staging
-            and preguntar("¿Certificado de PRUEBA (staging)?", "no", ["si", "no"])
+            and preguntar("¿Certificado de PRUEBA staging? (ENTER=no=real trusted; si=solo para no quemar límite)",
+                          "no", ["si", "no"])
             == "si"
         ):
             staging = True
     if not dominio or not email:
         sys.exit("Faltan --dominio y/o --email (o corre interactivo).")
     if _elegir_modo_web(args, salida):
+        print(f"  Modo: proxy central (site en <proyectos>/proxy/conf.d/{dominio}.conf, "
+              f"cert central, staging={staging}).")
         modo_configurar_web_proxy(args, salida, dominio, email, staging)
         return
+    print("  Modo: nginx propio (standalone, un solo HTTPS por host).")
     mapping = {
         "PROYECTO": salida.name,
         "ODOO_VERSION": env["ODOO_VERSION"],
@@ -2584,16 +2595,16 @@ def menu_principal() -> str:
     """Menú inicial. Devuelve acción o 'crear' para seguir flujo clásico."""
     acciones = [
         ("crear", "Crear proyecto nuevo (docker-compose Odoo)"),
-        ("sync", "Descargar módulos y aplicar (bundle/lista + deps + rebuild)"),
-        ("localizacion", "Instalación dependencias Localización Argentina"),
-        ("web", "Configurar web nginx + certbot [prod]"),
-        ("rclone", "Configurar rclone / Google Drive [prod]"),
-        ("monitor", "Ver monitor web (contenedores + logs)"),
-        ("github", "Configurar GitHub (token + org/usuario)"),
+        ("sync", "Módulos: descargar y aplicar (bundle/lista)"),
+        ("localizacion", "Localización AR: dependencias + Dockerfile"),
+        ("web", "Web: nginx + certbot [prod]"),
+        ("rclone", "Rclone / Drive [prod]"),
+        ("monitor", "Monitor web (contenedores + logs)"),
+        ("github", "GitHub: token + org/usuario"),
         ("backup", "Backup manual [prod]"),
         ("restore", "Restaurar BD [prod]"),
         ("migrar", "Migrar proyecto a nueva versión Odoo (OCA)"),
-        ("proxy", "Proxy multinstancia (nginx compartido por subdominio)"),
+        ("proxy", "Proxy multinstancia (nginx compartido) [prod/infra]"),
         ("migrar_vps", "Migrar instancia a otro VPS (paquete completo)"),
         ("dev", "Desarrollo (IDE + navegador)"),
         ("salir", "Salir"),
@@ -2602,23 +2613,32 @@ def menu_principal() -> str:
     labels = [v for _k, v in acciones if _k != "salir"]
     # Opciones navegables: 1..13 + 0 Salir (14 items, 0 navegable)
     nav_items = [f"{i}) {lab}" for i, lab in enumerate(labels, 1)] + ["0) Salir"]
+    pie_menu = ("↑/↓ + Enter · número + Enter · 0 sale | "
+                "Habitual: 1 crear → 2 módulos → 3 AR → 8 backup")
     # Intento con flechas si hay tty real
     try:
         from .tui import elegir_interactivo
         sel = elegir_interactivo(nav_items, titulo_txt="¿Qué quiere hacer?",
-                                 pie="↑/↓ + Enter · número + Enter · ESC sale")
+                                 pie=pie_menu)
         if sel is not None:
             if sel == len(nav_items) - 1:
                 return "salir"
             return acciones[sel][0]
     except Exception:  # noqa: BLE001
         pass
-    # Fallback clásico numérico
+    # Fallback clásico numérico (agrupado por fase, sin renumerar)
+    filas = [tenue("  — Crear —")]
+    for i, lab in enumerate(labels, 1):
+        if i == 4:
+            filas.append(tenue("  — Publicar [prod] —"))
+        if i == 6:
+            filas.append(tenue("  — Operar —"))
+        filas.append(f"  {numero(f'{i})')} {texto_menu(lab)}")
+    filas.append(tenue("  0) Salir"))
     print(marco(
         "¿Qué quiere hacer?",
-        [f"  {numero(f'{i})')} {texto_menu(lab)}" for i, lab in enumerate(labels, 1)] +
-        [tenue("  0) Salir")],
-        pie="↑/↓ + Enter · número + Enter · ESC sale",
+        filas,
+        pie=pie_menu,
     ))
     r = ask_texto(f"Elige [0-{len(labels)}]", "1")
     if r == "0":

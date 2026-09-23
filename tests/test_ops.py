@@ -1603,3 +1603,61 @@ def test_add_modules_actualiza_clon_viejo(tmp_path):
     _sp.run(["git", "commit", "-qm", "v2"], cwd=str(rem), env=e, check=True)
     ok2, fail2 = add_modules(proj, "custom", "r", str(rem), "17.0", ["mod_b"])
     assert ok2 == ["mod_b"] and fail2 == [], "el clon viejo debe actualizarse vía pull"
+
+
+def test_menu_agrupado_muestra_fases_y_flujo(monkeypatch, capsys):
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "0")
+    assert menu_principal() == "salir"
+    out = capsys.readouterr().out
+    assert "— Crear —" in out
+    assert "— Publicar [prod] —" in out
+    assert "— Operar —" in out
+    assert "Habitual: 1 crear" in out
+    # numeración intacta (sin renumerar)
+    assert " 11)" in out and "Proxy multinstancia" in out
+    assert " 12)" in out and "Migrar instancia a otro VPS" in out
+
+
+def test_web_proxy_sin_init_ofrece_init(monkeypatch, tmp_path, capsys):
+    import omc.flows as _fl
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    p = _proj_web_prod(tmp_path)
+    assert not (tmp_path / "proxy").exists()
+    monkeypatch.setattr(_fl, "es_interactivo", lambda: True)
+    monkeypatch.setattr(_fl, "ask_si_no", lambda *a, **k: True)
+
+    def _fake_init(salida=None):
+        _proxy_vacio(tmp_path)
+        return tmp_path / "proxy"
+
+    monkeypatch.setattr(_fl, "run_proxy_init", _fake_init)
+    monkeypatch.setattr(_fl.subprocess, "run", lambda *a, **k: _RC(0))
+    modo_configurar_web(_ns_web(p, proxy=True, no_input=False))
+    out = capsys.readouterr().out
+    sitio = tmp_path / "proxy" / "conf.d" / "tienda.com.conf"
+    assert sitio.exists()
+    assert "listen 443 ssl" in sitio.read_text(encoding="utf-8")
+    assert "https://tienda.com" in out
+
+
+def test_menu_loop_pausa_tras_exit(monkeypatch, capsys):
+    import omc.cli as _cli
+    seq = iter(["web", "salir"])
+
+    def _fake_menu():
+        return next(seq)
+
+    def _boom(accion):
+        raise SystemExit("No hay proxy central en /opt/proxy (corre `omc proxy init` primero).")
+
+    prompts = []
+    monkeypatch.setattr("omc.flows.menu_principal", _fake_menu)
+    monkeypatch.setattr(_cli, "_ejecutar_accion_menu", _boom)
+    monkeypatch.setattr(_cli, "es_interactivo", lambda: True)
+    monkeypatch.setattr("builtins.input", lambda *a, **k: prompts.append(a) or "")
+    _cli._menu_loop()
+    out = capsys.readouterr().out
+    assert "omc proxy init" in out
+    assert any("volver al men" in str(a[0]).lower() for a in prompts)
