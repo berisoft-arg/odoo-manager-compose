@@ -42,9 +42,12 @@
 - **Fix: `list_db = True` siempre** (dev y prod, manager por IP:puerto sin nginx; https sigue con `return 404`): `odoo.conf.tpl:12` + tests + `Manual §1.1/§3` (tras crear la BD pasar a `False` + restart).
 - **Marca OMC**: `Generado por omc` → `OMC` en templates (`odoo.conf`, `docker-compose.*`, `env.ejemplo`, `agents-proyecto`, `vscode-settings`, `Dockerfile`, `compose-migrate`) + `flows.py` stub + `migrate.py`.
 
-## [Sin publicar]
+## [1.1.5] - 2026-09-24
 
 - **Menú agrupado + proxy guiado**: menú por fases (Crear / Publicar / Operar) sin renumerar + pie con flujo habitual; `web --proxy` sin proxy inicializado ofrece `proxy init` en menú (antes abortaba al menú); pausa `Enter para volver` tras errores; staging/modo explícitos (`ENTER=no=real`). Tests + `Manual §3/§7.3/§12`.
+- **Menú título plano + deps con checklist**: título sin fondo azul ni foco inicial (solo la opción con foco al navegar); `run_deps` y `elegir_repo_guiado` usan el mismo `checklist` paginado de repos/módulos (con fallback textual). Tests.
+
+## [Sin publicar]
 
 ## [1.0.0]
 
