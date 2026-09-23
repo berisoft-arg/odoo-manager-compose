@@ -1178,24 +1178,40 @@ def elegir_repo_guiado(proyecto: Path, dep: str, branch: str, cat: dict) -> bool
     if o in ("OCA", "Ad Hoc"):
         org = "oca" if o == "OCA" else "adhoc"
         entries = [e for e in cat.get(org, []) if isinstance(e, dict)]
-        print(f"\n-- Repos {org.upper()} --")
-        for i, e in enumerate(entries, 1):
-            marca = (
-                "  <-- parece ser este"
-                if e["repo"].replace("-", "_") in dep or dep in e["repo"]
-                else ""
-            )
-            print(f"  {i:2}) {e['repo']}{marca}")
-        sel = ask_texto("Repo (número o nombre; vacío=salir)", "")
-        if not sel:
-            return False
-        if sel.isdigit() and 1 <= int(sel) <= len(entries):
-            e = entries[int(sel) - 1]
-        else:
-            e = next((x for x in entries if x["repo"] == sel), None)
+        repos_disp = [e["repo"] for e in entries]
+        # Checklist paginado primero (igual que descarga de repos), fallback textual
+        sel_repo = None
+        try:
+            from .tui import checklist
+            sel_repo = checklist(f"Elige repo de {org.upper()} ({len(repos_disp)})", repos_disp)
+        except Exception:  # noqa: BLE001
+            sel_repo = None
+        if sel_repo is not None:
+            if not sel_repo:
+                return False
+            e = next((x for x in entries if x["repo"] == sel_repo[0]), None)
             if not e:
                 print("  No está en el catálogo.")
                 return False
+        else:
+            print(f"\n-- Repos {org.upper()} --")
+            for i, e in enumerate(entries, 1):
+                marca = (
+                    "  <-- parece ser este"
+                    if e["repo"].replace("-", "_") in dep or dep in e["repo"]
+                    else ""
+                )
+                print(f"  {i:2}) {e['repo']}{marca}")
+            sel = ask_texto("Repo (número o nombre; vacío=salir)", "")
+            if not sel:
+                return False
+            if sel.isdigit() and 1 <= int(sel) <= len(entries):
+                e = entries[int(sel) - 1]
+            else:
+                e = next((x for x in entries if x["repo"] == sel), None)
+                if not e:
+                    print("  No está en el catálogo.")
+                    return False
         org2, repo, url = org, e["repo"], e["url"]
     else:
         url = ask_texto("Enlace GitHub del repo", "")
@@ -1213,32 +1229,48 @@ def elegir_repo_guiado(proyecto: Path, dep: str, branch: str, cat: dict) -> bool
         print("  Es un solo módulo; se descarga entero.")
         add_modules(proyecto, org2, repo, url, branch, [repo])
         return True
-    print(f"-- Módulos en {repo}@{branch} ({len(dirs)}) --")
     ordenados = sorted(dirs)
-    for i, m in enumerate(ordenados, 1):
-        marca = "  <-- buscas este" if m == dep else ""
-        print(f"  {i:3}) {m}{marca}")
-    raw = ask_texto("Módulos (números, nombres o 'todo'; vacío=solo el buscado)", "")
-    if not raw and dep in ordenados:
-        elegidos = [dep]
-    elif not raw:
-        return False
-    elif raw.strip().lower() in ("todo", "todos", "all", "*"):
-        elegidos = ordenados
-    else:
-        elegidos, inv = [], []
-        for tok in [t.strip() for t in raw.replace(" ", ",").split(",") if t.strip()]:
-            if tok.isdigit() and 1 <= int(tok) <= len(ordenados):
-                elegidos.append(ordenados[int(tok) - 1])
-            elif tok in ordenados:
-                elegidos.append(tok)
-            else:
-                inv.append(tok)
-        for v in inv:
-            print(f"  ⚠ '{v}' no existe, omitido.")
-        elegidos = sorted(set(elegidos))
+    # Checklist paginado primero (igual que descarga de módulos, con el buscado premarcado)
+    sel_mod = None
+    try:
+        from .tui import checklist as _checklist_mod
+        sel_mod = _checklist_mod(
+            f"Elige módulos de {repo}@{branch} ({len(ordenados)})",
+            ordenados,
+            marcados=[dep] if dep in ordenados else None,
+        )
+    except Exception:  # noqa: BLE001
+        sel_mod = None
+    if sel_mod is not None:
+        elegidos = [m for m in sel_mod if m in ordenados]
         if not elegidos:
             return False
+    else:
+        print(f"-- Módulos en {repo}@{branch} ({len(dirs)}) --")
+        for i, m in enumerate(ordenados, 1):
+            marca = "  <-- buscas este" if m == dep else ""
+            print(f"  {i:3}) {m}{marca}")
+        raw = ask_texto("Módulos (números, nombres o 'todo'; vacío=solo el buscado)", "")
+        if not raw and dep in ordenados:
+            elegidos = [dep]
+        elif not raw:
+            return False
+        elif raw.strip().lower() in ("todo", "todos", "all", "*"):
+            elegidos = ordenados
+        else:
+            elegidos, inv = [], []
+            for tok in [t.strip() for t in raw.replace(" ", ",").split(",") if t.strip()]:
+                if tok.isdigit() and 1 <= int(tok) <= len(ordenados):
+                    elegidos.append(ordenados[int(tok) - 1])
+                elif tok in ordenados:
+                    elegidos.append(tok)
+                else:
+                    inv.append(tok)
+            for v in inv:
+                print(f"  ⚠ '{v}' no existe, omitido.")
+            elegidos = sorted(set(elegidos))
+            if not elegidos:
+                return False
     add_modules(proyecto, org2, repo, url, branch, elegidos)
     return True
 
@@ -1461,6 +1493,24 @@ def run_deps(args):
             print("\nDisponibles en repos ya clonados (mismo repo, sin descargar):")
             for rp, mods in sorted(mismo_repo.items()):
                 print(f"  {rp}: {' '.join(sorted(mods))}")
+            if preguntar and args.fix:
+                try:
+                    from .tui import checklist as _cl_mismo
+                    _items_mismo = sorted(
+                        f"{m}  [{rp}]" for rp, mods in mismo_repo.items()
+                        for m in sorted(mods))
+                    _sel_mismo = _cl_mismo(
+                        f"Elige faltantes mismo-repo ({len(_items_mismo)})",
+                        _items_mismo)
+                except Exception:  # noqa: BLE001
+                    _sel_mismo = None
+                if _sel_mismo is not None:
+                    mismo_repo = {}
+                    for _it in _sel_mismo:
+                        if "  [" in _it and _it.endswith("]"):
+                            _m, _rp = _it.rsplit("  [", 1)
+                            mismo_repo.setdefault(_rp[:-1], set()).add(_m)
+                    mismo_repo = {rp: sorted(mods) for rp, mods in mismo_repo.items()}
         if total:
             print("\nFaltantes (ni en disco ni en base confirmada):")
             branch = args.branch or (
@@ -1515,6 +1565,20 @@ def run_deps(args):
                         if configurar_github_interactivo():
                             print("  Rebuscando en tu org...")
                             avance = True
+            if preguntar and args.fix and sugeridos:
+                try:
+                    from .tui import checklist as _cl_sug
+                    _items_sug = sorted(
+                        f"{dep} → {org}/{repo}" for dep, (org, repo, _u) in sugeridos.items())
+                    _map_sug = {f"{dep} → {org}/{repo}": dep
+                                for dep, (org, repo, _u) in sugeridos.items()}
+                    _sel_sug = _cl_sug(
+                        f"Elige faltantes a traer ({len(_items_sug)})", _items_sug)
+                except Exception:  # noqa: BLE001
+                    _sel_sug = None
+                if _sel_sug is not None:
+                    _eleg = {_map_sug[i] for i in _sel_sug if i in _map_sug}
+                    sugeridos = {d: sugeridos[d] for d in _eleg if d in sugeridos}
             if args.fix and sugeridos:
                 print("\nTrayendo sugeridos de otros repos...")
                 avance = True
@@ -2619,7 +2683,7 @@ def menu_principal() -> str:
     try:
         from .tui import elegir_interactivo
         sel = elegir_interactivo(nav_items, titulo_txt="¿Qué quiere hacer?",
-                                 pie=pie_menu)
+                                 pie=pie_menu, resaltar_titulo=False)
         if sel is not None:
             if sel == len(nav_items) - 1:
                 return "salir"
@@ -2639,6 +2703,7 @@ def menu_principal() -> str:
         "¿Qué quiere hacer?",
         filas,
         pie=pie_menu,
+        resaltar_titulo=False,
     ))
     r = ask_texto(f"Elige [0-{len(labels)}]", "1")
     if r == "0":

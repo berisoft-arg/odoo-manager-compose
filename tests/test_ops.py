@@ -1661,3 +1661,110 @@ def test_menu_loop_pausa_tras_exit(monkeypatch, capsys):
     out = capsys.readouterr().out
     assert "omc proxy init" in out
     assert any("volver al men" in str(a[0]).lower() for a in prompts)
+
+
+def test_run_deps_checklist_filtra_sugeridos(monkeypatch, tmp_path, capsys):
+    """Con tty + --fix, el checklist filtra qué sugeridos traer (subset)."""
+    import omc.flows as F
+    monkeypatch.setattr(F, "analizar_depends",
+                        lambda p: ({"mod_a": [("dep_x", "falta"), ("dep_y", "falta")]},
+                                   {}, {"dep_x", "dep_y"}))
+    monkeypatch.setattr(F, "buscar_modulo_en_catalogo",
+                        lambda dep, *a, **k: [("oca", "server-tools", "https://x/r")])
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("omc.tui.checklist",
+                        lambda titulo, items, marcados=None, pie=None: ["dep_x → oca/server-tools"])
+    traidos = []
+    monkeypatch.setattr(F, "add_modules",
+                        lambda proyecto, org, repo, url, br, mods: traidos.append((org, repo, mods)))
+    monkeypatch.setattr(F, "actualizar_addons_path", lambda *a, **k: None)
+    proj = _proj_dev(tmp_path)
+    (proj / "addons").mkdir(exist_ok=True)
+    F.run_deps(_args_deps(proj, fix=True))
+    assert traidos and all(t == ("oca", "server-tools", ["dep_x"]) for t in traidos)
+    capsys.readouterr()
+
+
+def test_run_deps_checklist_vacio_no_trae(monkeypatch, tmp_path, capsys):
+    """Checklist vacío (deseleccionar todo + Enter) no trae nada."""
+    import omc.flows as F
+    monkeypatch.setattr(F, "analizar_depends",
+                        lambda p: ({"mod_a": [("dep_x", "falta")]}, {}, {"dep_x"}))
+    monkeypatch.setattr(F, "buscar_modulo_en_catalogo",
+                        lambda dep, *a, **k: [("oca", "server-tools", "https://x/r")])
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("omc.tui.checklist", lambda *a, **k: [])
+    traidos = []
+    monkeypatch.setattr(F, "add_modules",
+                        lambda proyecto, org, repo, url, br, mods: traidos.append(mods))
+    monkeypatch.setattr(F, "actualizar_addons_path", lambda *a, **k: None)
+    proj = _proj_dev(tmp_path)
+    (proj / "addons").mkdir(exist_ok=True)
+    F.run_deps(_args_deps(proj, fix=True))
+    assert traidos == []
+    assert "Sin avances" in capsys.readouterr().out
+
+
+def test_run_deps_checklist_mismo_repo_subset(monkeypatch, tmp_path, capsys):
+    """Checklist filtra mismo-repo: solo el módulo elegido va a sparse-checkout."""
+    import omc.flows as F
+    monkeypatch.setattr(F, "analizar_depends",
+                        lambda p: ({}, {"addons/oca/server-tools": ["mod_a", "mod_b"]}, set()))
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr("omc.tui.checklist",
+                        lambda *a, **k: ["mod_a  [addons/oca/server-tools]"])
+    agregados = []
+    monkeypatch.setattr(F, "git_red", lambda s: [s])
+    monkeypatch.setattr(F, "run",
+                        lambda cmd, **k: agregados.append(cmd) or SimpleNamespace(returncode=0))
+    monkeypatch.setattr(F, "load_repos", lambda p: [])
+    monkeypatch.setattr(F, "save_repos", lambda p, r: None)
+    monkeypatch.setattr(F, "actualizar_addons_path", lambda *a, **k: None)
+    proj = _proj_dev(tmp_path)
+    (proj / "addons").mkdir(exist_ok=True)
+    F.run_deps(_args_deps(proj, fix=True))
+    adds = [c for c in agregados if "sparse-checkout" in c and "add" in c]
+    assert adds and all("mod_a" in c and "mod_b" not in c for c in adds)
+    capsys.readouterr()
+
+
+def test_elegir_repo_guiado_checklist(monkeypatch, tmp_path, capsys):
+    """Guiado usa checklist paginado para repo y módulos (con fallback intacto)."""
+    import omc.flows as F
+    from omc.flows import elegir_repo_guiado
+    proj = _proj_dev(tmp_path)
+    (proj / "addons").mkdir(exist_ok=True)
+    cat = {"oca": [{"repo": "server-tools", "url": "https://x/server-tools"}]}
+    monkeypatch.setattr("omc.flows.ask_opcion", lambda *a, **k: "OCA")
+    llamadas = {"n": 0}
+
+    def _fake_cl(titulo, items, marcados=None, pie=None):
+        llamadas["n"] += 1
+        if "repo" in titulo.lower():
+            assert items == ["server-tools"]
+            return ["server-tools"]
+        assert "auditlog" in items and "sentry" in items
+        return ["auditlog"]
+
+    monkeypatch.setattr("omc.tui.checklist", _fake_cl)
+    monkeypatch.setattr(F, "list_remote_topdirs",
+                        lambda url, br: (["auditlog", "sentry"], False, []))
+    traidos = []
+    monkeypatch.setattr(F, "add_modules",
+                        lambda proyecto, org, repo, url, br, mods: traidos.append((org, repo, mods)) or True)
+    assert elegir_repo_guiado(proj, "auditlog", "17.0", cat) is True
+    assert traidos == [("oca", "server-tools", ["auditlog"])]
+    capsys.readouterr()
+
+
+def test_marco_titulo_plano_sin_fondo(monkeypatch):
+    """resaltar_titulo=False deja el título plano; True mantiene fondo azul."""
+    import omc.tui as T
+    monkeypatch.setattr(T.sys.stdout, "isatty", lambda: True)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setattr(T.os, "environ", {})
+    con = T.marco("¿Qué quiere hacer?", ["  1) Crear"], pie=None, resaltar_titulo=True)
+    assert "\x1b[1;37;44m ¿Qué quiere hacer? \x1b[0m" in con
+    sin = T.marco("¿Qué quiere hacer?", ["  1) Crear"], pie=None, resaltar_titulo=False)
+    assert "\x1b[1;37;44m ¿Qué quiere hacer? \x1b[0m" not in sin
+    assert "¿Qué quiere hacer?" in sin

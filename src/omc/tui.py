@@ -15,6 +15,7 @@ _AZUL_MARINO = "34"
 _BLANCO = "37"
 _GRIS = "90"
 _FONDO_AZUL = "44"
+_SUBRAYADO = "4"
 _FIN = "0"
 _ANCHO_BARRA = 60
 # Alias para compatibilidad (no usados, mantenidos por si se importan)
@@ -96,10 +97,13 @@ def _ancho_visible(texto: str) -> int:
     return len(re.sub(r"\033\[[0-9;]*m", "", texto))
 
 
-def marco(titulo_txt: str, contenido: list, pie: str = None) -> str:
+def marco(titulo_txt: str, contenido: list, pie: str = None,
+          resaltar_titulo: bool = True) -> str:
     """Caja estilo installer sobre el scroll (no limpia pantalla).
 
     Sin color: líneas planas, byte-idénticas al formato histórico.
+    Con resaltar_titulo=False el título va plano (sin fondo azul); solo
+    la opción con foco lleva resaltado al navegar con flechas.
     """
     if not usa_color():
         partes = [titulo_txt, *contenido]
@@ -118,7 +122,10 @@ def marco(titulo_txt: str, contenido: list, pie: str = None) -> str:
         rel = _ancho_visible(texto)
         return f"{li} {texto}{' ' * max(0, ancho - rel - 2)}{ld}"
 
-    filas = [_fila(c(f" {titulo_txt} ", _NEGRITA, _BLANCO, _FONDO_AZUL))]
+    if resaltar_titulo:
+        filas = [_fila(c(f" {titulo_txt} ", _NEGRITA, _BLANCO, _FONDO_AZUL))]
+    else:
+        filas = [_fila(tenue(f" {titulo_txt} "))]
     filas += [_fila(t) for t in contenido]
     if pie is not None:
         filas.append(_fila(tenue(pie)))
@@ -146,13 +153,15 @@ def banner_omc(version: str) -> str:
 
 
 def elegir_interactivo(opciones: list, titulo_txt: str = "¿Qué quiere hacer?",
-                       pie: str = None) -> int | None:
+                       pie: str = None, resaltar_titulo: bool = True) -> int | None:
     """Menú navegable con flechas ↑/↓ + Enter. Retorna índice o None si sin tty.
 
     - Gate: sin tty real (stdin o stdout no es tty, NO_COLOR, TERM=dumb) → None (fallback numérico).
-    - Con tty: modo raw cbreak, oculta cursor, pinta caja con resaltado (fondo azul),
-      lee Esc-secuencias 3 bytes para flechas, Enter confirma, dígito mueve selección,
-      ESC/q sale (último = Salir). Restaura terminal siempre (finally).
+    - Con tty: modo raw cbreak, oculta cursor, pinta caja; solo la opción con
+      foco lleva resaltado (fondo azul) al navegar. Sin mover flechas no hay
+      nada resaltado (título siempre plano si resaltar_titulo=False).
+      Enter confirma, dígito mueve selección, ESC/q sale (último = Salir).
+      Restaura terminal siempre (finally).
     - Sin deps extra (solo termios/tty/select, stdlib). En Windows retorna None.
     """
     # Gate: sin tty → fallback
@@ -177,7 +186,7 @@ def elegir_interactivo(opciones: list, titulo_txt: str = "¿Qué quiere hacer?",
     n = len(opciones)
     if n == 0:
         return None
-    idx = 0  # 0..n-1, n incluye "0) Salir" como último si se pasa así; el llamador decide
+    idx = -1  # sin foco inicial: nada resaltado hasta mover flechas/dígito
     # Para distinguir, el llamador pasa lista completa con Salir incluido
     fd = sys.stdin.fileno()
     try:
@@ -220,8 +229,7 @@ def elegir_interactivo(opciones: list, titulo_txt: str = "¿Qué quiere hacer?",
                     else:
                         lineas.append(f"  {lab}")
         # Usar marco interno con contenido ya coloreado
-        # marco() con usa_color()=True añadirá bordes grises y título azul
-        out = marco(titulo_txt, lineas, pie=pie)
+        out = marco(titulo_txt, lineas, pie=pie, resaltar_titulo=resaltar_titulo)
         return out
 
     # Pintar inicialmente
@@ -245,11 +253,11 @@ def elegir_interactivo(opciones: list, titulo_txt: str = "¿Qué quiere hacer?",
                 continue
             # Flecha arriba: \x1b[A  o \x1bOA
             if ch in (b"\x1b[A", b"\x1bOA"):
-                idx = (idx - 1) % n
+                idx = n - 1 if idx == -1 else (idx - 1) % n
             elif ch in (b"\x1b[B", b"\x1bOB"):
-                idx = (idx + 1) % n
+                idx = 0 if idx == -1 else (idx + 1) % n
             elif ch in (b"\r", b"\n"):
-                return idx
+                return idx if idx != -1 else 0
             elif ch == b"\x1b":  # ESC solo → salir
                 return n - 1 if opciones[-1].strip().startswith("0)") or "Salir" in opciones[-1] else n - 1
             elif ch in (b"q", b"Q"):
