@@ -51,6 +51,11 @@
 
 - **Deploy espera ESC**: tras el `pulling`/`build` muestra resumen (`ps` + URL/logs o hints de puertos/`429`) y espera `ESC` para volver al menú (`Enter` no vuelve); sin tty no espera. `Manual §4.5`.
 
+## [1.1.7] - 2026-09-24
+
+- **Selector solo entornos**: `¿En qué proyecto?` nunca ofrece `proxy [infraestructura]` (filtro por `ENTORNO` en `elegir_proyecto`; explícito `--proyecto` a infra se rechaza; `migrar-vps --todo` filtra por `ENTORNO`); `logs` sigue permisivo. `Manual §4.6`.
+- **Checklist título plano + monitor ESC**: título sin fondo en checklist (igual que menú central); menú 6 espera `ESC` para copiar el token (vista del servicio y token nuevo). `Manual §14`.
+
 ## [Sin publicar]
 
 ## [1.0.0]
