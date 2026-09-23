@@ -453,6 +453,70 @@ def es_interactivo() -> bool:
     return sys.stdin.isatty()
 
 
+def esperar_esc_volver(mensaje: str = "Pulsa ESC para volver al menú...") -> bool:
+    """Espera solo ESC (o q) para volver. Enter/otras teclas no vuelven.
+
+    - Sin tty (ni stdin ni stdout), NO_COLOR o TERM=dumb → retorna True sin
+      bloquear (CI, --no-input, pytest).
+    - Con tty: lee una tecla en raw; ESC/q → True. Enter/otras → repite el
+      aviso sin volver. Ctrl+C/EOF → True (vuelve al menú, coherente con el loop).
+    - Nunca propaga excepción; restaura la terminal en finally.
+    - Retorna siempre True (volver); el llamador decide con el mensaje.
+    """
+    if os.environ.get("NO_COLOR") is not None:
+        return True
+    if os.environ.get("TERM", "") == "dumb":
+        return True
+    try:
+        if not sys.stdin.isatty() or not sys.stdout.isatty():
+            return True
+    except Exception:  # noqa: BLE001
+        return True
+    try:
+        import select
+        import termios
+        import tty
+    except Exception:  # noqa: BLE001  (Windows)
+        return True
+    try:
+        fd = sys.stdin.fileno()
+    except Exception:  # noqa: BLE001 (stdin redirigido sin fileno)
+        return True
+    try:
+        old = termios.tcgetattr(fd)
+    except Exception:  # noqa: BLE001
+        return True
+    try:
+        tty.setcbreak(fd)
+        sys.stdout.write(mensaje + "\n")
+        sys.stdout.flush()
+        while True:
+            r, _, _ = select.select([sys.stdin], [], [])
+            if not r:
+                continue
+            try:
+                ch = os.read(fd, 3)
+            except Exception:  # noqa: BLE001
+                return True
+            if not ch:
+                continue
+            if ch in (b"\x1b", b"q", b"Q"):
+                return True
+            # Enter/flechas/otras teclas: se ignoran, se repite el aviso sin volver
+            try:
+                sys.stdout.write(mensaje + "\n")
+                sys.stdout.flush()
+            except Exception:  # noqa: BLE001
+                pass
+    except KeyboardInterrupt:
+        return True
+    finally:
+        try:
+            termios.tcsetattr(fd, termios.TCSADRAIN, old)
+        except Exception:  # noqa: BLE001
+            pass
+
+
 def _leer(prompt: str) -> str:
     try:
         return input(prompt).strip()

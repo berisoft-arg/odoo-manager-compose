@@ -8,7 +8,8 @@
 >
 > **Uso diario: solo `omc`, sin argumentos.** Se abre el menú (opciones 1-13, `0` para salir)
 > y todo se elige ahí: crear, descargar módulos, localizar, nginx, rclone, monitor, GitHub,
-> backup, restore, migrar, proxy, migrar a otro VPS, desarrollo (IDE + navegador). Al terminar cada acción vuelve al menú.
+> backup, restore, migrar, proxy, migrar a otro VPS, desarrollo (IDE + navegador). Al terminar cada acción vuelve al menú
+> (el deploy espera `ESC`, los errores piden `Enter` antes de volver).
 > Los subcomandos directos (`omc crear --flags`, `omc addons ...`, etc.) existen como
 > **atajos avanzados** (scripts, VPS sin tty); este manual los marca como tales.
 
@@ -115,7 +116,7 @@ addons_path = /mnt/extra-addons/custom,/mnt/extra-addons,/mnt/extra-addons/adhoc
 omc     # sin flags abre el menú
 ```
 
-![Menú principal OMC — opciones 1-13 y 0 Salir](assets/images/menu.png)
+![Menú principal OMC — opciones 1-13 y 0 Salir (imagen referencial: las etiquetas se agrupan por fase)](assets/images/menu.png)
 
 *Opción 1 pide: 1) Nombre  2) Entorno  3) Versión  4) Puertos (validados)  5) Passwords  6) ¿Desplegar? Al terminar vuelve al menú: los módulos NO se descargan acá. Flujo habitual: 1 (crear) → 2 (descargar módulos con bundle o lista, rama X.0 automática) → 3 (localización AR si la necesitas: deja m2crypto/SECLEVEL + ofrece aplicar con Dockerfile + rebuild). El menú agrupa por fase (Crear / Publicar [prod] / Operar) sin renumerar: 1-13 + 0 Sale.*
 
@@ -169,7 +170,9 @@ Detecta `external_dependencies`, genera `requirements-odoo.txt` y ofrece `Docker
 ### 4.5 Despliegue final
 
 Pregunta `¿Desplegar ahora? (docker compose up -d --build)` con progreso **en vivo**
-(el primer build tarda minutos: pull + pip). Avanzado sin menú: `--deploy` / `--sin-deploy`.
+(el primer build tarda minutos: pull + pip). Al terminar muestra el resumen y espera
+`ESC` para volver al menú (vos decidís cuándo volver; `Enter` no vuelve).
+Avanzado sin menú: `--deploy` / `--sin-deploy`.
 
 ### 4.6 Solo instalador (proyecto existente)
 

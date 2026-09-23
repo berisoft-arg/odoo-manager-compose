@@ -1768,3 +1768,109 @@ def test_marco_titulo_plano_sin_fondo(monkeypatch):
     sin = T.marco("¿Qué quiere hacer?", ["  1) Crear"], pie=None, resaltar_titulo=False)
     assert "\x1b[1;37;44m ¿Qué quiere hacer? \x1b[0m" not in sin
     assert "¿Qué quiere hacer?" in sin
+
+
+def test_esperar_esc_volver_sin_tty_no_bloquea(monkeypatch):
+    """Sin tty retorna True sin leer nada (CI, --no-input, pytest)."""
+    import omc.tui as T
+    monkeypatch.setattr(T.sys.stdin, "isatty", lambda: False)
+    assert T.esperar_esc_volver() is True
+
+
+def test_esperar_esc_volver_solo_esc(monkeypatch, capsys):
+    """Enter/otras se ignoran; solo ESC (o q) vuelve."""
+    import sys as _sys
+    import omc.tui as T
+    monkeypatch.setattr(T.sys.stdin, "isatty", lambda: True)
+    monkeypatch.setattr(T.sys.stdin, "fileno", lambda: 0)
+    monkeypatch.setattr(T.sys.stdout, "isatty", lambda: True)
+    monkeypatch.delenv("NO_COLOR", raising=False)
+    monkeypatch.setenv("TERM", "xterm-256color")
+    lecturas = iter([b"\r", b"x", b"\x1b"])
+
+    class _FakeTermios:
+        TCSADRAIN = 1
+
+        @staticmethod
+        def tcgetattr(fd):
+            return "old"
+
+        @staticmethod
+        def tcsetattr(fd, when, old):
+            return None
+
+    class _FakeTty:
+        @staticmethod
+        def setcbreak(fd):
+            return None
+
+    class _FakeSelect:
+        @staticmethod
+        def select(r, w, x, *a):
+            return (r, [], [])
+
+    monkeypatch.setitem(_sys.modules, "termios", _FakeTermios)
+    monkeypatch.setitem(_sys.modules, "tty", _FakeTty)
+    monkeypatch.setitem(_sys.modules, "select", _FakeSelect)
+    monkeypatch.setattr(T.os, "read", lambda fd, n: next(lecturas))
+    assert T.esperar_esc_volver() is True
+    assert capsys.readouterr().out.count("Pulsa ESC") == 3
+
+
+def test_paso_despliegue_exito_espera_esc(monkeypatch, tmp_path, capsys):
+    """Tras up -d ok muestra ps + espera ESC (no vuelve solo)."""
+    import omc.flows as F
+    from omc.flows import paso_despliegue
+    p = tmp_path / "demo"
+    p.mkdir()
+
+    def _fake_run(cmd, **k):
+        if cmd[-1] == "ps":
+            return SimpleNamespace(returncode=0, stdout="NAME   STATUS\ndemo   Up\n")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr(F.subprocess, "run", _fake_run)
+    monkeypatch.setattr(F, "es_interactivo", lambda: True)
+    monkeypatch.setattr(F, "preguntar", lambda *a, **k: "si")
+    esperas = []
+    monkeypatch.setattr(F, "esperar_esc_volver", lambda *a, **k: esperas.append(1) or True)
+    paso_despliegue(p, 8069)
+    out = capsys.readouterr().out
+    assert "✓ Desplegado" in out and "Up" in out
+    assert esperas == [1]
+
+
+def test_paso_despliegue_fallo_espera_esc_con_hint(monkeypatch, tmp_path, capsys):
+    """Tras up -d fallido muestra hints (429, puertos) y espera ESC."""
+    import omc.flows as F
+    from omc.flows import paso_despliegue
+    p = tmp_path / "demo"
+    p.mkdir()
+    monkeypatch.setattr(F.subprocess, "run",
+                        lambda *a, **k: SimpleNamespace(returncode=1, stdout="", stderr=""))
+    monkeypatch.setattr(F, "es_interactivo", lambda: True)
+    monkeypatch.setattr(F, "preguntar", lambda *a, **k: "si")
+    esperas = []
+    monkeypatch.setattr(F, "esperar_esc_volver", lambda *a, **k: esperas.append(1) or True)
+    paso_despliegue(p, 8069)
+    out = capsys.readouterr().out
+    assert "⚠ Falló el despliegue" in out and "429" in out
+    assert esperas == [1]
+
+
+def test_paso_despliegue_sin_tty_no_espera(monkeypatch, tmp_path, capsys):
+    """Sin tty (auto) no bloquea esperando tecla."""
+    import omc.flows as F
+    from omc.flows import paso_despliegue
+    p = tmp_path / "demo"
+    p.mkdir()
+    monkeypatch.setattr(F.subprocess, "run",
+                        lambda *a, **k: SimpleNamespace(returncode=0, stdout="Up\n", stderr=""))
+    monkeypatch.setattr(F, "es_interactivo", lambda: False)
+
+    def _boom(*a, **k):
+        raise AssertionError("sin tty no debe esperar tecla")
+
+    monkeypatch.setattr(F, "esperar_esc_volver", _boom)
+    paso_despliegue(p, 8069, auto=True)
+    assert "✓ Desplegado" in capsys.readouterr().out

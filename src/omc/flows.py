@@ -30,6 +30,7 @@ from .tui import (
     marco,
     banner_omc,
     seccion,
+    esperar_esc_volver,
 )
 from .core import (
     render,
@@ -655,7 +656,8 @@ def paso_dependencias(salida: Path, mapping: dict, auto=False, puerto=None):
     def _desplegar_ahora():
         print(f"\nDesplegando en {salida} ...")
         print(
-            "  (el primer build tarda varios minutos: pull Odoo + pip. Verás el progreso abajo)"
+            "  (el primer build tarda varios minutos: pull Odoo + pip. Verás el progreso abajo;"
+            " no interrumpir hasta que termine)"
         )
         r = subprocess.run(
             ["docker", "compose", "up", "-d", "--build"], cwd=str(salida)
@@ -673,6 +675,9 @@ def paso_dependencias(salida: Path, mapping: dict, auto=False, puerto=None):
                 "  Y cambia ODOO_PORT / ODOO_GEVENT_PORT en .env + docker-compose.yml."
             )
             print("  Si no, revisa con: docker compose logs -f")
+            print("  Si dice '429 Too Many Requests': es Docker Hub (ajeno a OMC);"
+                  " haz docker login y reintenta.")
+        _resumen_deploy(salida, r.returncode)
 
     if py:
         # UNA sola pregunta (interactivo con puerto): Dockerfile + rebuild juntos
@@ -707,6 +712,26 @@ def paso_dependencias(salida: Path, mapping: dict, auto=False, puerto=None):
         return False
 
 
+def _resumen_deploy(salida: Path, returncode: int) -> None:
+    """Resumen post-deploy + espera ESC en interactivo (no vuelve solo al menú).
+
+    Muestra `docker compose ps` tras el pulling/build y, solo con tty, espera
+    ESC para volver al menú principal (Enter/otras teclas no vuelven).
+    Sin tty retorna sin bloquear (CI, --no-input, pytest).
+    """
+    if returncode == 0:
+        try:
+            ps = subprocess.run(["docker", "compose", "ps"], cwd=str(salida),
+                                text=True, stdout=subprocess.PIPE,
+                                stderr=subprocess.DEVNULL, timeout=30)
+            if ps.stdout and ps.stdout.strip():
+                print(ps.stdout.rstrip())
+        except Exception:  # noqa: BLE001
+            pass
+    if es_interactivo():
+        esperar_esc_volver()
+
+
 def paso_despliegue(salida: Path, puerto: int, auto=False):
     """Pregunta final: ¿desplegar? Ejecuta docker compose up -d --build."""
     if auto:
@@ -726,7 +751,8 @@ def paso_despliegue(salida: Path, puerto: int, auto=False):
         return
     print(f"\nDesplegando en {salida} ...")
     print(
-        "  (el primer build tarda varios minutos: pull Odoo + pip. Verás el progreso abajo)"
+        "  (el primer build tarda varios minutos: pull Odoo + pip. Verás el progreso abajo;"
+        " no interrumpir hasta que termine)"
     )
     # Sin capturar salida: el progreso se ve EN VIVO (antes parecía colgado)
     r = subprocess.run(["docker", "compose", "up", "-d", "--build"], cwd=str(salida))
@@ -739,7 +765,10 @@ def paso_despliegue(salida: Path, puerto: int, auto=False):
             "  Si dice 'port is already allocated': docker ps --format 'table {{.Names}}\\t{{.Ports}}'"
         )
         print("  Y cambia ODOO_PORT / ODOO_GEVENT_PORT en .env + docker-compose.yml.")
+        print("  Si dice '429 Too Many Requests': es Docker Hub (ajeno a OMC);"
+              " haz docker login y reintenta.")
         print("  Si no, revisa con: docker compose logs -f")
+    _resumen_deploy(salida, r.returncode)
 
 
 def leer_env_proyecto(salida: Path) -> dict:

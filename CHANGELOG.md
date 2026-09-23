@@ -49,6 +49,8 @@
 
 ## [Sin publicar]
 
+- **Deploy espera ESC**: tras el `pulling`/`build` muestra resumen (`ps` + URL/logs o hints de puertos/`429`) y espera `ESC` para volver al menú (`Enter` no vuelve); sin tty no espera. `Manual §4.5`.
+
 ## [1.0.0]
 
 Primera versión documentada: asistente + menú en loop, creación/operación de

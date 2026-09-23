@@ -68,7 +68,7 @@ which omc  # debe dar /usr/local/bin/omc desde root y desde admin
 omc                 # abre el menú
 ```
 
-![Menú principal OMC — opciones 1-13 y 0 Salir](assets/images/menu.png)
+![Menú principal OMC — opciones 1-13 y 0 Salir (imagen referencial: las etiquetas se agrupan por fase)](assets/images/menu.png)
 
 *Flujo habitual: `1` crear → `2` módulos → `3` localizar → `8` backup → `13` dev (VS Code/Codium + My Odoo Webkit + opencode). El menú agrupa por fase (Crear / Publicar / Operar) sin renumerar.*
 
