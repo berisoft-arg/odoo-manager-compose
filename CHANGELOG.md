@@ -33,6 +33,10 @@
 
 - **Dev prod-gating**: `opencode` siempre en dev (por proyecto, `.vscode` + `opencode.json` con `anomalyco.opencode`), nunca en prod VPS; en prod solo con `--force` genera `opencode.json` en modo terminal sin `.vscode`/IDE/extensión (advertencia).
 
+## [1.1.3] - 2026-09-23
+
+- **Docs: global + Dónde vive**: instalación global para root + cualquier usuario con `pipx` (`PIPX_HOME=/opt/pipx PIPX_BIN_DIR=/usr/local/bin --global`) y con `pip` (`sudo pip install --break` → `/usr/local/bin`), `§15.1` + verificación desde `/`, `/opt`, `/home`; `§13 Dónde vive` simplificado a proyectos en `/opt/<nombre>` por convención Odoo (`/opt/odoo`).
+
 ## [Sin publicar]
 
 ## [1.0.0]
