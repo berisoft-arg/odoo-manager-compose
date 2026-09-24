@@ -60,6 +60,10 @@
 
 - **Cosmética Bootstrap + menú 01-11**: monitor con paleta docs Bootstrap (header morado `#712CF9`, claro/blanco y oscuro `#212529`) y dropdown Claro/Oscuro/Auto con iconos SVG; menú principal `01 - 11`/`00` sin negrita ni paréntesis. `Manual §14`.
 
+## [1.1.9] - 2026-09-24
+
+- **Menú 9 restore ve sueltos**: listado `full_backup_*.tar.gz` + `*.dump` + carpetas con `db.dump` (antes: `(ninguno local)`); `*.dump` suelto va directo + `filestore*.tgz` hermano; flags `omc restore --db/--archivo/--drive/--local`. `Manual §9.2`.
+
 ## [Sin publicar]
 
 ## [1.0.0]
