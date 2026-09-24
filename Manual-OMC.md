@@ -589,6 +589,9 @@ docker compose run --rm certbot renew && docker compose exec nginx nginx -s relo
 ```bash
 ./scripts/backup.sh <nombre_bd>   # dump -Fc + filestore, rotación day1..day7 + copia dominical, validado
 ./scripts/restore.sh             # 100% guiado: local o Drive, doble confirmación, verifica
+# restore.sh acepta full_backup_*.tar.gz, *.dump sueltos (+ filestore*.tgz hermano)
+# o carpeta con db.dump (+ filestore.tgz): ej ./scripts/restore.sh paintershop backups/manual
+# Avanzado: `omc restore --proyecto <ruta> --db <bd> --archivo <ruta> [--drive|--local]`.
 # Retención: 7 diarios (day1..day7) + 4 domingos (week0..week3, local y Drive).
 # Probá el restore cada tanto en una BD de prueba: backup sin restore testeado no es backup.
 # Sin BD, backup.sh lista y eliges. Respalda rclone.conf en backups/.

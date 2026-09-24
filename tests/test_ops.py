@@ -2051,3 +2051,124 @@ def test_menu_numero_sin_negrita_con_tty(monkeypatch):
     monkeypatch.setenv("TERM", "xterm-256color")
     assert tui.numero("01 -") == "\033[34m01 -\033[0m"
     assert tui.texto_menu("Crear") == "\033[37mCrear\033[0m"
+
+
+def test_restore_tpl_acepta_sueltos_render(monkeypatch, tmp_path):
+    """restore.sh lista full_backup + *.dump + carpetas, y desempaqueta sueltos."""
+    import subprocess as _sp
+    from omc.core import render, template_text, sin_renderizar
+    out = render(template_text("restore.sh.tpl"), {"PROYECTO": "demo"})
+    assert sin_renderizar(out) == []
+    assert "backups/*.dump" in out
+    assert 'db.dump' in out
+    assert '[[ "$SRC" == *.dump ]]' in out
+    assert "--drive" in out and "--local" in out
+    r = _sp.run(["bash", "-n", "/dev/stdin"], input=out, text=True,
+                stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, timeout=15)
+    assert r.returncode == 0
+
+
+def _restore_harness(tmp_path):
+    """Proyecto fake con restore.sh renderizado + backups sueltos."""
+    import subprocess as _sp
+    from omc.core import render, template_text
+    p = tmp_path / "proj"
+    (p / "backups" / "carpeta").mkdir(parents=True)
+    (p / "backups" / "carpeta" / "db.dump").write_text("DUMP", encoding="utf-8")
+    (p / "backups" / "b.dump").write_text("DUMP", encoding="utf-8")
+    (p / "backups" / "full_backup_a_day1.tar.gz").write_text("TGZ", encoding="utf-8")
+    import subprocess as _touch
+    _touch.run(["touch", "-d", "2026-01-01 00:00:01", str(p / "backups" / "carpeta" / "db.dump")])
+    _touch.run(["touch", "-d", "2026-01-02 00:00:01", str(p / "backups" / "b.dump")])
+    _touch.run(["touch", "-d", "2026-01-03 00:00:01",
+                str(p / "backups" / "full_backup_a_day1.tar.gz")])
+    (p / "scripts").mkdir(exist_ok=True)
+    out = render(template_text("restore.sh.tpl"), {"PROYECTO": "demo"})
+    (p / "scripts" / "restore.sh").write_text(out, encoding="utf-8")
+    # extraer solo la función elegir_archivo del script real
+    fn = _sp.run(["awk", "/^elegir_archivo\\(\\) \\{/,/^\\}$/",
+                  str(p / "scripts" / "restore.sh")],
+                 text=True, stdout=_sp.PIPE, stderr=_sp.DEVNULL,
+                 timeout=15).stdout
+    assert "CANDS" in fn
+    harness = ("export REMOTE=gdrive\n" + fn
+               + '\nelegir_archivo\necho "SRC=$SRC DRIVE=$DRIVE"\n')
+    return p, harness
+
+
+def test_restore_menu_lista_sueltos_y_carpeta(tmp_path):
+    """El menú 9 ve tgz + dump suelto + carpeta (antes: ninguno local)."""
+    import subprocess as _sp
+    p, harness = _restore_harness(tmp_path)
+    r = _sp.run(["bash", "-c", harness], input="2\n", text=True,
+                stdout=_sp.PIPE, stderr=_sp.DEVNULL, timeout=15, cwd=str(p))
+    assert r.returncode == 0
+    assert "ninguno local" not in r.stdout
+    assert "SRC=backups/b.dump" in r.stdout
+
+
+def test_restore_menu_carpeta_y_drive(tmp_path):
+    """Carpeta elegible por número; 0 va a Drive."""
+    import subprocess as _sp
+    p, harness = _restore_harness(tmp_path)
+    r = _sp.run(["bash", "-c", harness], input="3\n", text=True,
+                stdout=_sp.PIPE, stderr=_sp.DEVNULL, timeout=15, cwd=str(p))
+    assert "SRC=backups/carpeta" in r.stdout
+    r = _sp.run(["bash", "-c", harness], input="0\n", text=True,
+                stdout=_sp.PIPE, stderr=_sp.DEVNULL, timeout=15, cwd=str(p))
+    assert "DRIVE=1" in r.stdout
+
+
+def test_restore_menu_sin_nada_local(tmp_path):
+    """Sin backups muestra (ninguno local) y 0 sigue yendo a Drive."""
+    import subprocess as _sp
+    from omc.core import render, template_text
+    p = tmp_path / "vacio"
+    (p / "backups").mkdir(parents=True)
+    (p / "scripts").mkdir(exist_ok=True)
+    out = render(template_text("restore.sh.tpl"), {"PROYECTO": "demo"})
+    (p / "scripts" / "restore.sh").write_text(out, encoding="utf-8")
+    fn = _sp.run(["awk", "/^elegir_archivo\\(\\) \\{/,/^\\}$/",
+                  str(p / "scripts" / "restore.sh")],
+                 text=True, stdout=_sp.PIPE, stderr=_sp.DEVNULL,
+                 timeout=15).stdout
+    harness = ("export REMOTE=gdrive\n" + fn
+               + '\nelegir_archivo\necho "SRC=$SRC DRIVE=$DRIVE"\n')
+    r = _sp.run(["bash", "-c", harness], input="0\n", text=True,
+                stdout=_sp.PIPE, stderr=_sp.DEVNULL, timeout=15, cwd=str(p))
+    assert "(ninguno local)" in r.stdout
+    assert "DRIVE=1" in r.stdout
+
+
+def test_run_restore_pasa_db_archivo_drive(monkeypatch, tmp_path, capsys):
+    """run_restore pasa --db/--archivo/--drive/--local al script."""
+    import subprocess as _sp
+    proj = _proj_dev(tmp_path)
+    (proj / ".env").write_text("ENTORNO=produccion\n", encoding="utf-8")
+    (proj / "scripts").mkdir(exist_ok=True)
+    (proj / "scripts" / "restore.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    vistos = []
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: vistos.append(a[0]))
+    run_restore(SimpleNamespace(proyecto=str(proj), db="paintershop",
+                                archivo="backups/manual", drive=False, local=False,
+                                neutralizar=False, sin_neutralizar=True))
+    run_restore(SimpleNamespace(proyecto=str(proj), db=None, archivo=None,
+                                drive=True, local=False,
+                                neutralizar=False, sin_neutralizar=False))
+    assert vistos[0] == ["./scripts/restore.sh", "paintershop", "backups/manual",
+                         "--sin-neutralizar"]
+    assert vistos[1] == ["./scripts/restore.sh", "--drive"]
+    capsys.readouterr()
+
+
+def test_cli_restore_drive_local_db_archivo():
+    from omc.cli import build_parser
+    args = build_parser().parse_args(["restore", "--drive"])
+    assert args.drive is True and args.local is False
+    args = build_parser().parse_args(
+        ["restore", "--db", "paintershop", "--archivo", "backups/manual", "--local"])
+    assert args.db == "paintershop" and args.archivo == "backups/manual"
+    assert args.local is True
+    import pytest
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["restore", "--drive", "--local"])

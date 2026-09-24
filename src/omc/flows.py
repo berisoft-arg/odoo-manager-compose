@@ -3100,12 +3100,22 @@ def run_restore(args):
     if not script.exists():
         print(f"  ⚠ {script} no existe (proyecto sin backups configurados).")
         return
-    flags = []
+    cmd = ["./scripts/restore.sh"]
+    if getattr(args, "db", None):
+        cmd.append(str(getattr(args, "db")).strip())
+    if getattr(args, "archivo", None):
+        if not getattr(args, "db", None):
+            sys.exit("Con --archivo indicá también --db <nombre>.")
+        cmd.append(str(getattr(args, "archivo")).strip())
+    if getattr(args, "drive", False):
+        cmd.append("--drive")
+    if getattr(args, "local", False):
+        cmd.append("--local")
     if getattr(args, "neutralizar", False):
-        flags.append("--neutralizar")
+        cmd.append("--neutralizar")
     if getattr(args, "sin_neutralizar", False):
-        flags.append("--sin-neutralizar")
-    subprocess.run(["./scripts/restore.sh"] + flags, cwd=str(proj))
+        cmd.append("--sin-neutralizar")
+    subprocess.run(cmd, cwd=str(proj))
 
 
 def _elegir_bd(proj: Path, db_arg, que: str) -> str:

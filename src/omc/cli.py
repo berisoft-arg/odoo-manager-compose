@@ -61,6 +61,12 @@ def build_parser():
 
     re = sub.add_parser("restore", help="Restaurar BD")
     re.add_argument("--proyecto", default=None)
+    re.add_argument("--db", default=None, help="Base destino (si falta, la pide)")
+    re.add_argument("--archivo", default=None,
+                    help="Backup local: full_backup.tgz, *.dump o carpeta (si falta, lo pide)")
+    g2 = re.add_mutually_exclusive_group()
+    g2.add_argument("--drive", action="store_true", help="Bajar de Google Drive")
+    g2.add_argument("--local", action="store_true", help="Forzar local (default: local primero)")
     g = re.add_mutually_exclusive_group()
     g.add_argument("--neutralizar", action="store_true",
                    help="Neutralizar tras restaurar (solo copias dev: apaga crons y mail)")

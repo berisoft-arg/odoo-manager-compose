@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # Restore {{PROYECTO}} — 100% autoguiado (también acepta args para automatizar).
 # Uso guiado: ./scripts/restore.sh
-# Uso directo: ./scripts/restore.sh <nombre_bd> <full_backup.tgz|carpeta> [--drive]
+# Uso directo: ./scripts/restore.sh <nombre_bd> <full_backup.tgz|*.dump|carpeta> [--drive|--local]
 #   --drive: baja el tgz de Google Drive (rclone) antes de restaurar.
+#   --local: fuerza local aunque haya Drive (default: local primero).
+# Acepta full_backup_*.tar.gz, *.dump sueltos (+ filestore*.tgz hermano)
+# o carpeta con db.dump (+ filestore.tgz opcional).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -12,25 +15,32 @@ fi
 REMOTE="${RCLONE_REMOTE:-gdrive}"
 RCFG="scripts/rclone.conf"; [ -s "$RCFG" ] || RCFG="$HOME/.config/rclone/rclone.conf"
 SLUG=$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-_')
-BD="${1:-}"
-SRC="${2:-}"
+BD=""
+SRC=""
 DRIVE=0
-[ "${3:-}" = "--drive" ] && DRIVE=1
+for _a in "$@"; do
+  case "$_a" in
+    --drive) DRIVE=1 ;;
+    --local) DRIVE=0 ;;
+    --neutralizar|--sin-neutralizar) ;;  # los procesa el bloque final
+    *) if [ -z "$BD" ]; then BD="$_a"; elif [ -z "$SRC" ]; then SRC="$_a"; fi ;;
+  esac
+done
 
 elegir_archivo() {
-  echo "Backups locales (backups/full_backup_*.tar.gz):"
-  mapfile -t FILES < <(ls -t backups/full_backup_*.tar.gz 2>/dev/null || true)
+  echo "Backups locales (full_backup_*.tar.gz, *.dump o carpeta con db.dump):"
+  mapfile -t CANDS < <({ ls -t backups/full_backup_*.tar.gz backups/*.dump 2>/dev/null; for d in backups/*/; do [ -f "${d}db.dump" ] && echo "${d%/}"; done; } 2>/dev/null || true)
   echo "  0) Bajar de Drive ($REMOTE:{{PROYECTO}}/)"
-  if [ "${#FILES[@]}" -eq 0 ]; then echo "  (ninguno local)"; fi
-  i=1; for f in "${FILES[@]}"; do echo "  $i) $f"; i=$((i+1)); done
-  read -rp "Elige [0-${#FILES[@]}]: " N
+  if [ "${#CANDS[@]}" -eq 0 ]; then echo "  (ninguno local)"; fi
+  i=1; for f in "${CANDS[@]}"; do echo "  $i) $f"; i=$((i+1)); done
+  read -rp "Elige [0-${#CANDS[@]}]: " N
   if [ "$N" = "0" ]; then DRIVE=1; return 0; fi
-  SRC="${FILES[$((N-1))]:-}"
+  SRC="${CANDS[$((N-1))]:-}"
   [ -n "$SRC" ] || { echo "Selección inválida."; exit 1; }
 }
 
 if [ -z "$SRC" ]; then
-  [ -t 0 ] || { echo "Uso: $0 <nombre_bd> <full_backup.tgz|carpeta> [--drive]"; exit 1; }
+  [ -t 0 ] || { echo "Uso: $0 <nombre_bd> <full_backup.tgz|*.dump|carpeta> [--drive|--local]"; exit 1; }
   elegir_archivo
 fi
 
@@ -58,6 +68,13 @@ if [[ "$SRC" == *.tar.gz ]]; then
   DUMP=$(find "$WORK" -maxdepth 2 -name "*.dump" | head -n 1)
   FS=$(find "$WORK" -maxdepth 2 \( -name "filestore*.tgz" -o -name "filestore*.tar.gz" \) | head -n 1)
   [ -n "$DUMP" ] || { echo "El tgz no trae *.dump."; exit 1; }
+elif [[ "$SRC" == *.dump ]]; then
+  # dump suelto: va directo + filestore*.tgz hermano si hay
+  DUMP="$SRC"
+  FS=""
+  for _cand in "$(dirname "$SRC")"/filestore*.tgz "$(dirname "$SRC")"/filestore*.tar.gz; do
+    if [ -f "$_cand" ]; then FS="$_cand"; break; fi
+  done
 else
   DUMP="$SRC/db.dump"
   FS="$SRC/filestore.tgz"
@@ -66,12 +83,12 @@ fi
 
 if [ -z "$BD" ]; then
   if [ -t 0 ]; then
-    # sugerir por nombre del archivo: full_backup_<bd>_dayN.tar.gz
-    SUG=$(basename "$SRC" | sed -E 's/^full_backup_//; s/_day[0-9].*//')
+    # sugerir por nombre: full_backup_<bd>_dayN.tar.gz, *.dump o carpeta
+    SUG=$(basename "$SRC" | sed -E 's/^full_backup_//; s/_day[0-9].*//; s/\.dump$//; s/\.tar\.gz$//')
     read -rp "Base destino [$SUG]: " BD
     BD="${BD:-$SUG}"
   else
-    echo "Uso: $0 <nombre_bd> <full_backup.tgz|carpeta> [--drive]"
+    echo "Uso: $0 <nombre_bd> <full_backup.tgz|*.dump|carpeta> [--drive|--local]"
     exit 1
   fi
 fi
