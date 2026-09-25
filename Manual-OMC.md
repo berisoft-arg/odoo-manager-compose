@@ -430,10 +430,12 @@ externa `omc-proxy` y levanta nginx. `omc web --proxy` conecta el sitio:
 + `ports` → `expose` + `proxy_mode`, escribe el site día-1 en
 `proxy/conf.d/<dominio>.conf`, valida con `nginx -t`, recarga, corre certonly
 **central** (apex + www) y deja el site HTTPS. Si el cert ya existe y no es
-staging, lo conserva sin re-emitir. Renovar todo (cron semanal en host: `0 3 * * 0`):
+staging, lo conserva sin re-emitir. Al activar HTTPS en real, OMC ofrece programar
+el renew semanal en tu cron (ruta absoluta, `--quiet`); si no hay tty o no hay
+binario `crontab`, imprime la línea para pegar a mano. Renovar todo (cron semanal en host: `0 3 * * 0`):
 
 ```bash
-cd /opt/proxy && docker compose run --rm certbot renew && docker compose exec nginx nginx -s reload
+cd /opt/proxy && docker compose run --rm certbot renew --quiet && docker compose exec nginx nginx -s reload
 ```
 
 Reglas duras (fallan limpio, sin escribir a medias):
@@ -584,10 +586,11 @@ USER odoo
 
 ### 9.1 HTTPS (prod con dominio)
 
-Ver §7.2. Renovar (cron semanal en host: `0 3 * * 0`):
+Ver §7.2. Al activar HTTPS en real, OMC ofrece programar el renew semanal en tu cron
+(si no, imprime la línea para pegarla a mano). Renovar a mano (cron semanal en host: `0 3 * * 0`):
 
 ```bash
-docker compose run --rm certbot renew && docker compose exec nginx nginx -s reload
+docker compose run --rm certbot renew --quiet && docker compose exec nginx nginx -s reload
 ```
 
 ### 9.2 Backups y restore (+ Drive) [solo prod: dev no lleva scripts]

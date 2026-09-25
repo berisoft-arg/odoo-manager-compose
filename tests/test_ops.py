@@ -2482,3 +2482,79 @@ def test_certbot_solo_a_demanda_sin_sleep():
         assert "sleep infinity" not in out
         assert 'profiles: ["certbot"]' in out
         assert "image: certbot/certbot" in out
+
+
+def test_linea_renew_cron_absoluta_sin_pwd():
+    from omc.flows import linea_renew_cron, cron_tiene_renew
+    linea = linea_renew_cron("/opt/odoo", "/usr/bin/docker")
+    assert linea.startswith("0 3 * * 0 cd /opt/odoo && /usr/bin/docker compose ")
+    assert "$(" not in linea and "TU_IP" not in linea
+    assert "renew --quiet" in linea and "nginx -s reload" in linea
+    assert cron_tiene_renew("0 3 * * 0 cd /opt/odoo && docker compose run --rm certbot renew\n")
+    assert not cron_tiene_renew("0 3 * * * cd /opt/x && ./scripts/backup.sh bd\n")
+    assert not cron_tiene_renew("")
+
+
+def test_instalar_renew_cron_instala_una_vez(monkeypatch, tmp_path, capsys):
+    """Lee crontab, agrega la línea y la instala (mock crontab binario)."""
+    import omc.flows as F
+    vistos = []
+
+    def _fake_run(cmd, **k):
+        vistos.append((list(cmd), k.get("input", "")))
+        if cmd == ["crontab", "-l"]:
+            return SimpleNamespace(returncode=1, stdout="", stderr="")
+        if cmd == ["crontab", "-"]:
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _fake_run)
+    monkeypatch.setattr(F, "es_interactivo", lambda: True)
+    monkeypatch.setattr(F, "ask_si_no", lambda *a, **k: True)
+    assert F.instalar_renew_cron(tmp_path / "odoo") is True
+    out = capsys.readouterr().out
+    assert "domingos 03:00" in out
+    escritos = [i for c, i in vistos if c == ["crontab", "-"]]
+    assert len(escritos) == 1
+    assert "certbot renew --quiet" in escritos[0] and str(tmp_path / "odoo") in escritos[0]
+
+
+def test_instalar_renew_cron_no_duplica(monkeypatch, tmp_path, capsys):
+    """Con renew ya programado no escribe nada."""
+    import omc.flows as F
+    llamadas = []
+
+    def _fake_run(cmd, **k):
+        llamadas.append(list(cmd))
+        if cmd == ["crontab", "-l"]:
+            return SimpleNamespace(
+                returncode=0,
+                stdout="0 3 * * 0 cd /opt/odoo && docker compose run --rm certbot renew\n",
+                stderr="")
+        raise AssertionError("no debe escribir el crontab")
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _fake_run)
+    assert F.instalar_renew_cron(tmp_path / "odoo") is True
+    assert "ya programado" in capsys.readouterr().out
+    assert llamadas == [["crontab", "-l"]]
+
+
+def test_instalar_renew_cron_sin_tty_solo_informa(monkeypatch, tmp_path, capsys):
+    """Sin tty informa la línea sin bloquear ni escribir."""
+    import omc.flows as F
+
+    def _fake_run(cmd, **k):
+        if cmd == ["crontab", "-l"]:
+            return SimpleNamespace(returncode=1, stdout="", stderr="")
+        raise AssertionError("sin tty no debe escribir el crontab")
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _fake_run)
+    monkeypatch.setattr(F, "es_interactivo", lambda: False)
+
+    def _boom(*a, **k):
+        raise AssertionError("sin tty no debe preguntar")
+
+    monkeypatch.setattr(F, "ask_si_no", _boom)
+    assert F.instalar_renew_cron(tmp_path / "odoo") is False
+    out = capsys.readouterr().out
+    assert "0 3 * * 0 cd" in out

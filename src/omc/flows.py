@@ -815,6 +815,61 @@ def _certonly_cmd(email: str, dominio: str, staging: bool) -> list:
     return cmd
 
 
+def linea_renew_cron(proyecto_root: Path, docker_bin: str = "") -> str:
+    """Línea de cron semanal para renovar el cert (ruta absoluta, sin $(pwd))."""
+    dock = docker_bin or shutil.which("docker") or "docker"
+    return (f"0 3 * * 0 cd {Path(proyecto_root).resolve()} && {dock} compose "
+            "run --rm certbot renew --quiet && "
+            f"{dock} compose exec nginx nginx -s reload")
+
+
+def cron_tiene_renew(texto_cron: str) -> bool:
+    """True si el crontab ya programa un renew de certbot."""
+    import re as _re
+    return bool(_re.search(r"certbot.*renew", texto_cron or ""))
+
+
+def instalar_renew_cron(proyecto_root: Path) -> bool:
+    """Ofrece e instala el renew semanal en el cron del usuario. Idempotente.
+
+    Solo interactivo; sin tty informa la línea para pegar a mano. Nunca usa
+    sudo ni pisa entradas existentes. Retorna True si quedó programado.
+    """
+    linea = linea_renew_cron(proyecto_root)
+    try:
+        r = subprocess.run(["crontab", "-l"], text=True, stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, timeout=15)
+        actual = r.stdout or ""
+    except FileNotFoundError:
+        print("  Sin binario crontab en el host; programalo a mano:")
+        print(f"  {linea}")
+        return False
+    except Exception:  # noqa: BLE001
+        print("  No pude leer el crontab; programalo a mano:")
+        print(f"  {linea}")
+        return False
+    if cron_tiene_renew(actual):
+        print("  ✓ renew semanal ya programado en tu cron.")
+        return True
+    print("  Renew semanal sugerido (ruta absoluta, sin $(pwd)):")
+    print(f"  {linea}")
+    if not es_interactivo() or not ask_si_no("¿Programar renew semanal en tu cron?", False):
+        return False
+    nuevo = (actual.rstrip("\n") + "\n" + linea + "\n") if actual.strip() else (linea + "\n")
+    try:
+        w = subprocess.run(["crontab", "-"], input=nuevo, text=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                           timeout=15)
+    except Exception:  # noqa: BLE001
+        w = None
+    if w is None or w.returncode != 0:
+        print("  ⚠ crontab rechazó la entrada; pegala a mano:")
+        print(f"  {linea}")
+        return False
+    print("  ✓ renew semanal programado (domingos 03:00).")
+    return True
+
+
 def _activar_https(salida: Path, dominio: str, email: str, staging: bool) -> bool:
     """Obtiene el cert (dominio + www) y deja nginx.conf con la estructura HTTPS.
 
@@ -846,6 +901,8 @@ def _activar_https(salida: Path, dominio: str, email: str, staging: bool) -> boo
         print(f"  cd {salida} && docker compose restart nginx")
         return False
     print(f"  ✓ HTTPS activo: https://{dominio} (www redirige al apex).")
+    if not staging:
+        instalar_renew_cron(salida)
     return True
 
 
@@ -915,6 +972,8 @@ def _activar_https_proxy(salida: Path, proxy_root: Path, dominio: str,
     print(f"  Renovar todo (cron semanal en host: 0 3 * * 0): cd {proxy_root} && "
           "docker compose run --rm certbot renew && "
           "docker compose exec nginx nginx -s reload")
+    if not staging:
+        instalar_renew_cron(proxy_root)
     return True
 
 
