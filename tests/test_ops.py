@@ -355,7 +355,7 @@ def test_run_monitor_muestra_servicio_y_vuelve(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr("omc.flows.subprocess.run",
                         lambda *a, **k: SimpleNamespace(returncode=0))
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr("builtins.input", lambda *a, **k: "4")  # Volver
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "5")  # Volver
     run_monitor(SimpleNamespace())
     out = capsys.readouterr().out
     assert "TOK-SERVICIO-123" in out and "8765" in out
@@ -2005,7 +2005,7 @@ def test_run_monitor_espera_esc_para_copiar(monkeypatch, tmp_path, capsys):
     monkeypatch.setattr("omc.flows.subprocess.run",
                         lambda *a, **k: SimpleNamespace(returncode=0))
     monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
-    monkeypatch.setattr("builtins.input", lambda *a, **k: "4")  # Volver
+    monkeypatch.setattr("builtins.input", lambda *a, **k: "5")  # Volver
     esperas = []
     monkeypatch.setattr(F, "esperar_esc_volver",
                         lambda *a, **k: esperas.append(1) or True)
@@ -2400,3 +2400,69 @@ def test_parchear_proxy_doble_ports(tmp_path):
     assert "8070:8069" not in txt and "8073:8072" not in txt
     assert "container_name: tienda-odoo" in txt
     assert "expose" in cambios
+
+
+def test_run_monitor_instala_servicio_persistente(monkeypatch, tmp_path, capsys):
+    """Opción servicio: genera unit 0600, enable --now y conserva el token."""
+    import omc.flows as F
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path / "projs"))
+    monkeypatch.setenv("OMC_HOME", str(tmp_path / "data"))
+    monkeypatch.setenv("USER", "tester")
+    cmds = []
+
+    def _fake_run(cmd, **k):
+        cmds.append(list(cmd))
+        if cmd[:3] == ["loginctl", "show-user", "tester"]:
+            return SimpleNamespace(returncode=0, stdout="Linger=yes\n", stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _fake_run)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    respuestas = iter(["3", "", "", "", ""])  # persistente, puerto/host/token default
+    monkeypatch.setattr("builtins.input", lambda *a, **k: next(respuestas))
+    monkeypatch.setattr(F, "puerto_en_uso", lambda p: False)
+    esperas = []
+    monkeypatch.setattr(F, "esperar_esc_volver",
+                        lambda *a, **k: esperas.append(1) or True)
+    monkeypatch.setattr(F, "ask_si_no", lambda *a, **k: False)
+    run_monitor(SimpleNamespace())
+    out = capsys.readouterr().out
+    unit = (tmp_path / ".config" / "systemd" / "user" / "omc-monitor.service")
+    assert unit.exists()
+    txt = unit.read_text(encoding="utf-8")
+    assert "Environment=ODOO_WEB_TOKEN=" in txt
+    assert "--host 127.0.0.1 --port 8765" in txt
+    assert "sobrevive reboot" in out
+    assert any(c[:3] == ["systemctl", "--user", "daemon-reload"] for c in cmds)
+    assert any(c[:4] == ["systemctl", "--user", "enable", "--now"] for c in cmds)
+    import os as _os
+    assert oct(_os.stat(unit).st_mode & 0o777) == "0o600"
+
+
+def test_run_monitor_servicio_pide_linger(monkeypatch, tmp_path, capsys):
+    """Sin linger lo indica y lo ejecuta con sudo si se acepta."""
+    import omc.flows as F
+    monkeypatch.setenv("HOME", str(tmp_path))
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path / "projs"))
+    monkeypatch.setenv("OMC_HOME", str(tmp_path / "data"))
+    monkeypatch.setenv("USER", "tester")
+    cmds = []
+
+    def _fake_run(cmd, **k):
+        cmds.append(list(cmd))
+        if cmd[:2] == ["loginctl", "show-user"]:
+            return SimpleNamespace(returncode=0, stdout="Linger=no\n", stderr="")
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    monkeypatch.setattr("omc.flows.subprocess.run", _fake_run)
+    monkeypatch.setattr(sys.stdin, "isatty", lambda: True)
+    respuestas = iter(["3", "", "", "", ""])  # persistente, puerto/host/token default
+    monkeypatch.setattr("builtins.input", lambda *a, **k: next(respuestas))
+    monkeypatch.setattr(F, "puerto_en_uso", lambda p: False)
+    monkeypatch.setattr(F, "esperar_esc_volver", lambda *a, **k: True)
+    monkeypatch.setattr(F, "ask_si_no", lambda *a, **k: True)
+    run_monitor(SimpleNamespace())
+    out = capsys.readouterr().out
+    assert "enable-linger" in out
+    assert ["sudo", "loginctl", "enable-linger", "tester"] in cmds

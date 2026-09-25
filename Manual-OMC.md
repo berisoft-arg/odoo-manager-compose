@@ -752,9 +752,13 @@ Los proyectos se crean en `/opt/<nombre>` (ej. `/opt/mi_proyecto`) por convenci�
 
 Desde el **menú opción 6**: muestra la URL, el puerto y el token **reales del
 servicio** (leídos del unit systemd; si no hay servicio, los pide) y después
-ofrece frente/fondo/stop. La URL y el token **solo** se muestran acá, nunca en
-el arranque ni en el resumen del deploy (ahí solo se indica dónde verlos).
+ofrece frente/fondo/persistente/stop. La URL y el token **solo** se muestran acá,
+nunca en el arranque ni en el resumen del deploy (ahí solo se indica dónde verlos).
 Tras mostrar el token espera `ESC` para seguir (copialo tranquilo; `Enter` no avanza).
+`Instalar servicio persistente` genera el unit systemd de usuario y lo habilita
+(sobrevive cierre de SSH y reboot; pide `linger` con sudo una sola vez) para
+guardarlo como favorito del navegador. Sin servicio, frente/fondo mueren al
+cerrar la sesión o reiniciar.
 Avanzado sin menú:
 
 ```bash

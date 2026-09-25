@@ -3019,6 +3019,76 @@ def _monitor_service_info():
             "token": _env("ODOO_WEB_TOKEN")}
 
 
+def _instalar_servicio_monitor(base_cmd: list, port: int, host: str, token: str) -> bool:
+    """Genera el unit systemd de usuario del monitor y lo habilita. Idempotente.
+
+    Sobrevive a cierre de SSH y reboot (con linger). Conserva el token
+    existente: nunca lo rota. Retorna True si quedó activo.
+    """
+    import os
+    from .core import data_home, projects_home
+    unit_dir = Path.home() / ".config" / "systemd" / "user"
+    try:
+        unit_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as e:
+        print(f"  ⚠ No pude crear {unit_dir}: {e}")
+        return False
+    if len(base_cmd) >= 3 and base_cmd[1:3] == ["-m", "omc.webapp"]:
+        arranque = f"{base_cmd[0]} -m omc.webapp"
+    else:
+        arranque = base_cmd[0] if base_cmd else "omc-monitor"
+    unit = unit_dir / "omc-monitor.service"
+    unit.write_text(
+        "[Unit]\n"
+        "Description=Odoo Manager Compose - Monitor web (solo lectura)\n"
+        "After=network.target\n"
+        "[Service]\n"
+        "Type=simple\n"
+        f"Environment=OMC_HOME={data_home()}\n"
+        f"Environment=OMC_PROJECTS={projects_home()}\n"
+        f"Environment=ODOO_WEB_TOKEN={token}\n"
+        f"ExecStart={arranque} --host {host} --port {port}\n"
+        "Restart=on-failure\n"
+        "[Install]\n"
+        "WantedBy=default.target\n",
+        encoding="utf-8",
+    )
+    try:
+        os.chmod(unit, 0o600)
+    except OSError:
+        pass
+    print(f"  ✓ unit en {unit}")
+    r = subprocess.run(["systemctl", "--user", "daemon-reload"])
+    if r.returncode != 0:
+        print("  ⚠ daemon-reload falló (¿systemd de usuario disponible?).")
+        return False
+    r = subprocess.run(["systemctl", "--user", "enable", "--now", "omc-monitor"])
+    if r.returncode != 0:
+        print("  ⚠ enable --now falló; actívalo a mano:")
+        print("  systemctl --user enable --now omc-monitor")
+        return False
+    user = os.environ.get("USER") or os.environ.get("LOGNAME") or "$USER"
+    try:
+        r = subprocess.run(["loginctl", "show-user", user, "-p", "Linger"],
+                           text=True, stdout=subprocess.PIPE,
+                           stderr=subprocess.DEVNULL, timeout=10)
+        linger = "yes" in (r.stdout or "").lower()
+    except Exception:  # noqa: BLE001
+        linger = False
+    if not linger:
+        print("  Para que sobreviva sin login/reboot falta linger (una vez, con sudo):")
+        print(f"  sudo loginctl enable-linger {user}")
+        if es_interactivo() and ask_si_no("¿Ejecutarlo ahora con sudo?", True):
+            subprocess.run(["sudo", "loginctl", "enable-linger", user])
+    r = subprocess.run(["systemctl", "--user", "is-active", "--quiet", "omc-monitor"],
+                       stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL, timeout=10)
+    if r.returncode == 0:
+        print("  ✓ servicio activo (sobrevive reboot). Guárdalo como favorito.")
+        return True
+    print("  ⚠ no quedó activo; revisá: systemctl --user status omc-monitor")
+    return False
+
+
 def run_monitor(args):
     """Monitor web solo-lectura (contenedores + logs + métricas)."""
     _ = args
@@ -3034,6 +3104,7 @@ def run_monitor(args):
     modo = ask_opcion(
         "Monitor web (solo lectura: contenedores + logs + métricas)",
         ["Ver en esta terminal (Ctrl+C lo detiene)", "Fondo (libera la terminal)",
+         "Instalar servicio persistente (systemd, sobrevive reboot)",
          "Detener el de fondo", "Volver"],
         "Ver en esta terminal (Ctrl+C lo detiene)",
     )
@@ -3062,6 +3133,9 @@ def run_monitor(args):
         print(f"\nAbra http://TU_IP:{port}  (token: {token})")
     if es_interactivo():
         esperar_esc_volver("Token a la vista — copialo. Pulsa ESC para seguir...")
+    if modo.startswith("Instalar servicio"):
+        _instalar_servicio_monitor(base_cmd, port, host, token)
+        return
     cmd = [*base_cmd, "--port", str(port), "--host", host, "--token", token]
     if fondo:
         subprocess.run([*cmd, "--fondo"])
