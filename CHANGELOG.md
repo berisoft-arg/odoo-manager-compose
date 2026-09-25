@@ -81,6 +81,10 @@
 
 - **Certbot solo a demanda**: `profiles: ["certbot"]` en ambos templates + fuera `command: sleep infinity` (nacía muerto con `unrecognized arguments: sleep infinity`); `run --rm certonly/renew` intacto. `Manual §7.2`.
 
+## [1.2.4] - 2026-09-25
+
+- **HTTPS ofrece programar renew**: al activar cert real, pregunta e instala el renew semanal en tu cron (ruta absoluta + `docker` absoluto + `--quiet`, sin duplicar, sin sudo); sin tty/binario solo informa la línea. `Manual §7.3/§9.1`.
+
 ## [Sin publicar]
 
 ## [1.0.0]
