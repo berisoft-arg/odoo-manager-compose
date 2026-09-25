@@ -69,9 +69,11 @@
 - **Restore valida filestore**: `validar_filestore()` inspecciona el tgz antes de borrar (prefijo `filestore/` OK, sin prefijo se auto-ubica con aviso, ilegible/vacío aborta sin tocar nada) + cuenta archivos al final. `Manual §9.2`.
 - **Backup rclone opcional visible**: ante fallo de subida muestra resumen local + `✓` y mantiene `exit 1`; `--sin-rclone` (alias `--local`) saltea Drive; `omc backup --db/--sin-rclone/--local` + resumen + `ESC`. `Manual §9.2`.
 
-## [Sin publicar]
+## [1.2.1] - 2026-09-25
 
-- **Gevent en prod como el HTTP**: `crear` pregunta `Puerto longpolling/gevent` también en producción (validado, `--gevent-port`); prod standalone publica `PUERTO:8069 + GEVENT:8072`, con nginx/proxy solo `expose`. `Manual §4.2/§10`.
+- **Gevent en prod como el HTTP**: `crear` pregunta `Puerto longpolling/gevent` también en producción (validado, `--gevent-port`); prod standalone publica `PUERTO:8069 + GEVENT:8072`, con nginx/proxy solo `expose`. `Manual §1.2/§4.2/§10/§12`.
+
+## [Sin publicar]
 
 ## [1.0.0]
 
