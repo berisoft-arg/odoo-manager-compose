@@ -661,7 +661,7 @@ default (`addons-bundle.json` en la raíz del proyecto) o cualquier ruta absolut
 (ej. `~/bundles/tienda.json`) sin pisar nada. Si versionás el proyecto en git,
 commitear el bundle es la vía más repetible.
 
-**5) Restore (datos).** Menú opción 9 o `./scripts/restore.sh`: lista los tgz
+**5) Restore (datos).** Menú opción 9 o `./scripts/restore.sh`: lista tgz, dumps sueltos o carpetas
 (locales o Drive), doble confirmación, para odoo, recrea la BD (`DROP+CREATE`;
 si no puede, `--clean --if-exists`, útil con backups de instalaciones desde fuente),
 restaura filestore y levanta.

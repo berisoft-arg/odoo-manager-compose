@@ -64,6 +64,11 @@
 
 - **Menú 9 restore ve sueltos**: listado `full_backup_*.tar.gz` + `*.dump` + carpetas con `db.dump` (antes: `(ninguno local)`); `*.dump` suelto va directo + `filestore*.tgz` hermano; flags `omc restore --db/--archivo/--drive/--local`. `Manual §9.2`.
 
+## [1.2.0] - 2026-09-25
+
+- **Restore valida filestore**: `validar_filestore()` inspecciona el tgz antes de borrar (prefijo `filestore/` OK, sin prefijo se auto-ubica con aviso, ilegible/vacío aborta sin tocar nada) + cuenta archivos al final. `Manual §9.2`.
+- **Backup rclone opcional visible**: ante fallo de subida muestra resumen local + `✓` y mantiene `exit 1`; `--sin-rclone` (alias `--local`) saltea Drive; `omc backup --db/--sin-rclone/--local` + resumen + `ESC`. `Manual §9.2`.
+
 ## [Sin publicar]
 
 ## [1.0.0]

@@ -3806,8 +3806,8 @@ def crear_proyecto(args):
     print("\nSiguiente paso:")
     print(f"  cd {salida} && docker compose up -d")
     print(f"  Abrir http://localhost:{puerto}")
-    # --- Localización vía flag (el menú interactivo de localización se quitó;
-    #     usar opción 9 para AdHoc en proyecto existente, o módulos manual) ---
+    # --- Localización vía flag (usar opción 3 para AdHoc en proyecto
+    #     existente, o módulos manual) ---
     if args.localizacion:
         aplicar_localizacion(salida, version, args.localizacion,
                              ofrecer_aplicar=False)
