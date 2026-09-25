@@ -77,6 +77,10 @@
 
 - **Menú 6 instala servicio persistente**: genera el unit systemd de usuario del monitor y lo habilita (`daemon-reload` + `enable --now`, conserva el token); pide `linger` con sudo una sola vez para sobrevivir reboot. `Manual §14`.
 
+## [1.2.3] - 2026-09-25
+
+- **Certbot solo a demanda**: `profiles: ["certbot"]` en ambos templates + fuera `command: sleep infinity` (nacía muerto con `unrecognized arguments: sleep infinity`); `run --rm certonly/renew` intacto. `Manual §7.2`.
+
 ## [Sin publicar]
 
 ## [1.0.0]
