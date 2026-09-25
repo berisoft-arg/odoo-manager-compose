@@ -13,7 +13,8 @@ def _add_crear_args(p):
     p.add_argument("--version", dest="version", choices=["17", "18", "19"])
     p.add_argument("--nombre", default=None)
     p.add_argument("--puerto", type=int, default=None)
-    p.add_argument("--gevent-port", type=int, default=None)
+    p.add_argument("--gevent-port", type=int, default=None,
+                   help="Puerto host para gevent/longpolling 8072 (dev y prod)")
     p.add_argument("--salida", default=None)
     p.add_argument("--password", default=None)
     p.add_argument("--admin-password", default=None)

@@ -1,7 +1,7 @@
 """Generación de docker-compose.yml, odoo.conf, Dockerfile y bloques auxiliares."""
 from pathlib import Path
 
-from .core import leer_env, render, sin_renderizar, template_text
+from .core import render, sin_renderizar, template_text
 
 PROXY_NETWORK = "omc-proxy"
 PROXY_PROJECT = "proxy"
@@ -101,14 +101,15 @@ def parchear_compose_a_proxy(salida, proyecto: str) -> dict:
             1,
         )
         cambios.append("networks odoo")
-    # ports -> expose (el proxy llega por red, no por puertos publicados)
-    env = leer_env(salida)
-    puerto = env.get("ODOO_PORT", "8069")
-    if f'    ports:\n      - "{puerto}:8069"\n' in txt:
-        txt = txt.replace(
-            f'    ports:\n      - "{puerto}:8069"\n',
+    # ports -> expose (el proxy llega por red, no por puertos publicados).
+    # Cubre bloque de una línea ("8069") o doble ("8069"+"8072").
+    import re as _re
+    _ports_bloque = _re.compile(r'    ports:\n(?:      - "[^"]+"\n)+')
+    if _ports_bloque.search(txt):
+        txt = _ports_bloque.sub(
             '    expose:\n      - "8069"\n      - "8072"\n',
-            1,
+            txt,
+            count=1,
         )
         cambios.append("expose")
     # bloque networks top-level antes de volumes (chequeo independiente del

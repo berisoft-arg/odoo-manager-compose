@@ -26,8 +26,8 @@ Asistente interactivo + CLI + monitor web + migración OCA entre versiones.
 - **Backup/restore**: dump PostgreSQL + filestore, local o Drive (+ copia dominical),
   con doble confirmación al restaurar.
 - **Desarrollo (IDE + navegador)**: `.vscode/` para VS Code/VSCodium (settings, launch, tasks, extensiones `anomalyco.opencode`/Python/Ruff/Docker/Odoo), `opencode.json` (`$schema` + `instructions ["AGENTS.md"]`), `AGENTS.md` por proyecto, **My Odoo Webkit** Chrome (model/field/record) y **opencode** CLI/TUI.
-- **Multi-instancia**: puertos validados y sugeridos libres, `ODOO_GEVENT_PORT`,
-  `omc list` / `omc doctor [--fix]`. Con dominio en un solo host: **proxy
+- **Multi-instancia**: puertos HTTP y gevent validados y sugeridos libres (`ODOO_PORT`,
+  `ODOO_GEVENT_PORT` en dev y en prod), `omc list` / `omc doctor [--fix]`. Con dominio en un solo host: **proxy
   nginx compartido** (`omc proxy init` + `omc web --proxy`), un site por
   subdominio con TLS centralizado.
 

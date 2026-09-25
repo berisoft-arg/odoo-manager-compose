@@ -89,7 +89,7 @@ addons_path = /mnt/extra-addons/custom,/mnt/extra-addons,/mnt/extra-addons/adhoc
 | Aspecto | desarrollo | producción |
 |---|---|---|
 | `restart` | `no` (no vuelve solo) | `always` |
-| odoo | `--dev=all`, workers 0, 8072 expuesto | workers `min(2CPU+1, RAM/1GB)` (tope 16) + límites, `proxy_mode` si hay nginx |
+| odoo | `--dev=all`, workers 0, 8072 expuesto | workers `min(2CPU+1, RAM/1GB)` (tope 16) + límites, `proxy_mode` si hay nginx; gevent remapeable igual que en dev |
 | postgres | liviano (128MB shared_buffers, 50 conn) | tuneado (256MB, 100 conn, `command:`) |
 | recursos | 1 CPU / 2G odoo | 2 CPU / 4G odoo (+ límites en db y nginx) |
 | web | directa en `ODOO_PORT` | nginx + certbot opcional por dominio |
@@ -148,7 +148,8 @@ vía `versions/*.env`: **17 → postgres:15; 18/19 → postgres:16**.
 ### 4.2 Puertos (validados antes de generar)
 
 Se valida puerto HTTP y gevent contra socket local + `docker ps`. Si está ocupado, avisa y
-sugiere el primer libre. Avanzado sin menú: `--puerto`, `--gevent-port`. En prod no se expone 8072.
+sugiere el primer libre. Avanzado sin menú: `--puerto`, `--gevent-port` (vale en dev y en prod).
+En prod standalone se publican ambos (`PUERTO:8069` + `GEVENT:8072`); con nginx/proxy solo `expose`.
 Si el deploy choca igual (carrera), el error indica quién ocupa el puerto.
 
 ### 4.3 Módulos (rama automática, nunca se pregunta)
@@ -696,8 +697,9 @@ Restaurar en destino: descomprimir en `$OMC_PROJECTS` y por cada proyecto
 
 ## 10. Puertos y múltiples instancias
 
-Cada proyecto dev usa dos puertos host configurables (`ODOO_PORT → 8069`,
-`ODOO_GEVENT_PORT → 8072`), guardados en `.env`. Ver ocupados:
+Cada proyecto usa dos puertos host configurables (`ODOO_PORT → 8069`,
+`ODOO_GEVENT_PORT → 8072`), guardados en `.env`. En prod standalone se publican
+ambos; con nginx/proxy solo `expose`. Ver ocupados:
 
 ```bash
 docker ps --format 'table {{.Names}}\t{{.Ports}}'
@@ -721,7 +723,7 @@ docker compose exec db pg_dump -U odoo postgres > backup.sql
 
 | Síntoma | Causa | Fix |
 |---|---|---|
-| `Bind 0.0.0.0:8072 failed: port is already allocated` | Otro proyecto dev usa ese puerto host | El asistente valida y asigna libres (`ODOO_GEVENT_PORT`); ver `docker ps` |
+| `Bind 0.0.0.0:8072 failed: port is already allocated` | Otro proyecto usa ese puerto host (dev o prod) | El asistente valida y asigna libres (`ODOO_GEVENT_PORT`); ver `docker ps` |
 | `invalid addons directory '/mnt/extra-addons'` | `addons/` vacío | Inofensivo; desaparece al agregar módulos |
 | `missing --http-interface` (Odoo 19) | Aviso, default cambia en 20.0 | `http_interface = 0.0.0.0` en plantilla |
 | `pysimplesoap` 1.8.14 vs `pyafipws` (quiere `==1.8.22`) | Requirements de Codize pinean `stable_py3k` (viejo) | El asistente fuerza `pysimplesoap==1.8.22` si hay pyafipws; regenera con `check-deps` |

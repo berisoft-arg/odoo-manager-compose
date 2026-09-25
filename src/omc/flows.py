@@ -3437,34 +3437,32 @@ def crear_proyecto(args):
                     break
                 continue
             break
-    # Puerto gevent/dev 8072 en host: configurable para no chocar entre proyectos (solo desarrollo)
-    if entorno == "desarrollo":
-        if args.gevent_port:
-            gevent_port = args.gevent_port
-            if puerto_en_uso(gevent_port):
-                libre = puerto_libre(gevent_port + 1)
-                print(
-                    f"  ⚠ Puerto gevent {gevent_port} en uso, se usa {libre} en su lugar."
-                )
-                gevent_port = libre
-        elif args.no_input or not es_interactivo():
-            gevent_port = puerto_libre(8072)
-        else:
-            while True:
-                sugerido_gp = str(puerto_libre(8072))
-                gevent_port = ask_puerto(
-                    "Puerto longpolling/dev (host → 8072)", int(sugerido_gp)
-                )
-                if puerto_en_uso(gevent_port):
-                    print(
-                        f"  ⚠ El puerto {gevent_port} ya está en uso. Libre sugerido: {puerto_libre(gevent_port + 1)}"
-                    )
-                    continue
-                break
-        print(f"  HTTP    : host {puerto} → contenedor 8069")
-        print(f"  Gevent  : host {gevent_port} → contenedor 8072")
+    # Puerto gevent/longpolling 8072 en host: configurable para no chocar
+    # entre proyectos (dev y prod: igual que el HTTP, se pregunta y se aplica)
+    if args.gevent_port:
+        gevent_port = args.gevent_port
+        if puerto_en_uso(gevent_port):
+            libre = puerto_libre(gevent_port + 1)
+            print(
+                f"  ⚠ Puerto gevent {gevent_port} en uso, se usa {libre} en su lugar."
+            )
+            gevent_port = libre
+    elif args.no_input or not es_interactivo():
+        gevent_port = puerto_libre(8072)
     else:
-        gevent_port = 8072  # no se expone en prod, solo referencia
+        while True:
+            sugerido_gp = str(puerto_libre(8072))
+            gevent_port = ask_puerto(
+                "Puerto longpolling/gevent (host → 8072)", int(sugerido_gp)
+            )
+            if puerto_en_uso(gevent_port):
+                print(
+                    f"  ⚠ El puerto {gevent_port} ya está en uso. Libre sugerido: {puerto_libre(gevent_port + 1)}"
+                )
+                continue
+            break
+    print(f"  HTTP    : host {puerto} → contenedor 8069")
+    print(f"  Gevent  : host {gevent_port} → contenedor 8072")
     # Mailpit solo en dev (buzón local: ningún mail real sale del VPS)
     mailpit_port = puerto_libre(8025) if entorno == "desarrollo" else 8025
     if entorno == "desarrollo":
@@ -3636,11 +3634,14 @@ def crear_proyecto(args):
     }
     if not dev:
         if nginx == "si" and dominio:
-            mapping["ODOO_PORTS"] = '    expose:\n      - "8069"\n'
+            mapping["ODOO_PORTS"] = '    expose:\n      - "8069"\n      - "8072"\n'
             nginx_tpl = cargar_template("compose-nginx-block.yml.tpl")
             mapping["NGINX_SERVICES"] = render(nginx_tpl, mapping)
         else:
-            mapping["ODOO_PORTS"] = f'    ports:\n      - "{puerto}:8069"\n'
+            mapping["ODOO_PORTS"] = (
+                f'    ports:\n      - "{puerto}:8069"\n'
+                f'      - "{gevent_port}:8072"\n'
+            )
             mapping["NGINX_SERVICES"] = ""
         mapping["RCLONE_SERVICE"] = render(
             cargar_template("compose-rclone-block.yml.tpl"), mapping

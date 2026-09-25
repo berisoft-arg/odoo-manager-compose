@@ -71,6 +71,8 @@
 
 ## [Sin publicar]
 
+- **Gevent en prod como el HTTP**: `crear` pregunta `Puerto longpolling/gevent` también en producción (validado, `--gevent-port`); prod standalone publica `PUERTO:8069 + GEVENT:8072`, con nginx/proxy solo `expose`. `Manual §4.2/§10`.
+
 ## [1.0.0]
 
 Primera versión documentada: asistente + menú en loop, creación/operación de

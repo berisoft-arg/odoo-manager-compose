@@ -2354,3 +2354,49 @@ def test_cli_backup_flags():
     import pytest
     with pytest.raises(SystemExit):
         build_parser().parse_args(["backup", "--sin-rclone", "--local"])
+
+
+def test_crear_prod_publica_gevent_remapeado(tmp_path, monkeypatch):
+    """Prod standalone publica PUERTO:8069 + GEVENT:8072 (remapeo con efecto)."""
+    from types import SimpleNamespace
+    from omc.core import sin_renderizar
+    from omc.flows import crear_proyecto
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    args = SimpleNamespace(
+        entorno="produccion", version="18", nombre="tienda",
+        puerto=18069, gevent_port=18073, salida=str(tmp_path / "tienda"),
+        password="pgpass", admin_password="admin", no_input=True,
+        addon=[], sin_addons=True, bundle=None, localizacion=None,
+        deploy=False, sin_deploy=True, dominio=None, email=None,
+        sin_nginx=True, staging=False, odoo_cpus=None, odoo_mem=None,
+        db_cpus=None, db_mem=None, rclone_remote=None, vcpus=None,
+        ram_gb=None, ide="none", proyecto=None,
+    )
+    crear_proyecto(args)
+    comp = (tmp_path / "tienda" / "docker-compose.yml").read_text(encoding="utf-8")
+    assert '"18069:8069"' in comp and '"18073:8072"' in comp
+    assert sin_renderizar(comp) == []
+    env = (tmp_path / "tienda" / ".env").read_text(encoding="utf-8")
+    assert "ODOO_GEVENT_PORT=18073" in env
+
+
+def test_parchear_proxy_doble_ports(tmp_path):
+    """El parche a proxy convierte bloque ports doble en expose."""
+    from omc.compose import parchear_compose_a_proxy
+    p = tmp_path / "tienda"
+    p.mkdir()
+    (p / "docker-compose.yml").write_text(
+        "services:\n  odoo:\n    image: odoo:18\n"
+        '    ports:\n      - "8070:8069"\n      - "8073:8072"\n'
+        "volumes:\n  odoo-db-data:\n", encoding="utf-8")
+    (p / ".env").write_text("ENTORNO=produccion\nODOO_PORT=8070\n",
+                            encoding="utf-8")
+    (p / "config").mkdir()
+    (p / "config" / "odoo.conf").write_text("[options]\n", encoding="utf-8")
+    cambios = parchear_compose_a_proxy(p, "tienda")["cambios"]
+    txt = (p / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "expose" in txt and '"8072"' in txt
+    assert "8070:8069" not in txt and "8073:8072" not in txt
+    assert "container_name: tienda-odoo" in txt
+    assert "expose" in cambios
