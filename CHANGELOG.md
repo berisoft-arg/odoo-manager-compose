@@ -73,6 +73,10 @@
 
 - **Gevent en prod como el HTTP**: `crear` pregunta `Puerto longpolling/gevent` también en producción (validado, `--gevent-port`); prod standalone publica `PUERTO:8069 + GEVENT:8072`, con nginx/proxy solo `expose`. `Manual §1.2/§4.2/§10/§12`.
 
+## [1.2.2] - 2026-09-25
+
+- **Menú 6 instala servicio persistente**: genera el unit systemd de usuario del monitor y lo habilita (`daemon-reload` + `enable --now`, conserva el token); pide `linger` con sudo una sola vez para sobrevivir reboot. `Manual §14`.
+
 ## [Sin publicar]
 
 ## [1.0.0]
