@@ -3085,10 +3085,20 @@ def run_backup(args):
     if not script.exists():
         print(f"  ⚠ {script} no existe (proyecto sin backups configurados).")
         return
-    bd = ""
-    if es_interactivo():
+    bd = (str(getattr(args, "db", None) or "").strip()
+          if getattr(args, "db", None) else "")
+    if not bd and es_interactivo():
         bd = ask_texto("Base a respaldar (vacío = elegir de lista)", "").strip()
-    subprocess.run(["./scripts/backup.sh"] + ([bd] if bd else []), cwd=str(proj))
+    cmd = ["./scripts/backup.sh"] + ([bd] if bd else [])
+    if getattr(args, "sin_rclone", False) or getattr(args, "local", False):
+        cmd.append("--sin-rclone")
+    r = subprocess.run(cmd, cwd=str(proj))
+    if r.returncode == 0:
+        print("✓ Backup terminado (ver Backups locales arriba).")
+    else:
+        print("⚠ El backup terminó con errores (el local puede estar bien; revisá el log de arriba).")
+    if es_interactivo():
+        esperar_esc_volver("Pulsa ESC para volver al menú...")
 
 
 def run_restore(args):

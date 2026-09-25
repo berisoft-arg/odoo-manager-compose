@@ -2172,3 +2172,185 @@ def test_cli_restore_drive_local_db_archivo():
     import pytest
     with pytest.raises(SystemExit):
         build_parser().parse_args(["restore", "--drive", "--local"])
+
+
+def _validar_harness(tmp_path):
+    """Extrae validar_filestore() del restore.sh real + fixtures tgz."""
+    import subprocess as _sp
+    from omc.core import render, template_text
+    p = tmp_path / "vfs"
+    (p / "src").mkdir(parents=True, exist_ok=True)
+    out = render(template_text("restore.sh.tpl"), {"PROYECTO": "demo"})
+    (p / "restore.sh").write_text(out, encoding="utf-8")
+    fn = _sp.run(["awk", "/^validar_filestore\\(\\) \\{/,/^\\}$/",
+                  str(p / "restore.sh")],
+                 text=True, stdout=_sp.PIPE, stderr=_sp.DEVNULL,
+                 timeout=15).stdout
+    assert "FS_MODO" in fn
+    # bueno: con prefijo filestore/<bd>/... ; anidado: <bd>/... pelado
+    (p / "src" / "filestore" / "bd").mkdir(parents=True, exist_ok=True)
+    (p / "src" / "filestore" / "bd" / "a.bin").write_text("A", encoding="utf-8")
+    _sp.run(["tar", "czf", str(p / "bueno.tgz"), "-C", str(p / "src"),
+             "filestore/bd"], check=True, timeout=15)
+    (p / "src2" / "bd").mkdir(parents=True, exist_ok=True)
+    (p / "src2" / "bd" / "a.bin").write_text("A", encoding="utf-8")
+    _sp.run(["tar", "czf", str(p / "anidado.tgz"), "-C", str(p / "src2"),
+             "bd"], check=True, timeout=15)
+    _sp.run(["tar", "czf", str(p / "vacio.tgz"), "--files-from", "/dev/null"],
+            check=True, timeout=15)
+    (p / "corrupto.tgz").write_text("no es un tar", encoding="utf-8")
+    return p, fn
+
+
+def _corre_validar(tmp_path, tgz, bd="bd"):
+    import subprocess as _sp
+    p, fn = _validar_harness(tmp_path)
+    harness = (fn + f'\nFS="{tgz}"\nBD="{bd}"\n'
+               + 'if validar_filestore; then echo "RC=0 MODO=$FS_MODO"; '
+               + 'else echo "RC=1"; fi\n')
+    return _sp.run(["bash", "-c", harness], text=True, stdout=_sp.PIPE,
+                   stderr=_sp.DEVNULL, timeout=15, cwd=str(p))
+
+
+def test_validar_filestore_directo(tmp_path):
+    r = _corre_validar(tmp_path, "bueno.tgz")
+    assert r.returncode == 0
+    assert "RC=0 MODO=directo" in r.stdout
+    assert "prefijo filestore/ OK" in r.stdout
+
+
+def test_validar_filestore_anidado_autoajuste(tmp_path):
+    r = _corre_validar(tmp_path, "anidado.tgz")
+    assert r.returncode == 0
+    assert "RC=0 MODO=anidado" in r.stdout
+    assert "sin prefijo" in r.stdout
+
+
+def test_validar_filestore_vacio_y_corrupto_abortan(tmp_path):
+    r = _corre_validar(tmp_path, "vacio.tgz")
+    assert "RC=1" in r.stdout and "vacío" in r.stdout
+    r = _corre_validar(tmp_path, "corrupto.tgz")
+    assert "RC=1" in r.stdout and "ilegible" in r.stdout
+    r = _corre_validar(tmp_path, "noexiste.tgz")
+    assert "RC=1" in r.stdout and "no encontrado" in r.stdout
+
+
+def _backup_harness(tmp_path):
+    """Proyecto fake con backup.sh renderizado + docker stub (dump ok, rclone falla)."""
+    import os as _os
+    import stat as _stat
+    import subprocess as _sp
+    from omc.core import render, template_text
+    p = tmp_path / "bproj"
+    (p / "backups").mkdir(parents=True)
+    (p / "scripts").mkdir(exist_ok=True)
+    out = render(template_text("backup.sh.tpl"), {"PROYECTO": "demo"})
+    (p / "scripts" / "backup.sh").write_text(out, encoding="utf-8")
+    (p / ".env").write_text("POSTGRES_PASSWORD=odoo\n", encoding="utf-8")
+    bindir = p / "bin"
+    bindir.mkdir(exist_ok=True)
+    (bindir / "docker").write_text(
+        "#!/bin/bash\n"
+        # el script usa "docker compose ..." y "docker run ..." pelado
+        '[ "${1:-}" = "compose" ] && shift\n'
+        'case "${1:-}" in\n'
+        "  exec)\n"
+        '    for a in "$@"; do [ "$a" = "pg_dump" ] && { echo "DUMP-FAKE"; exit 0; }; done\n'
+        "    exit 0 ;;\n"
+        "  run)\n"
+        '    for a in "$@"; do [ "$a" = "rclone" ] && exit 1; done\n'
+        "    exit 1 ;;\n"  # alpine test -d -> sin filestore
+        "  --profile)\n"
+        "    exit 1 ;;\n"  # rclone copy -> falla
+        "esac\n"
+        "exit 0\n", encoding="utf-8")
+    _os.chmod(bindir / "docker", 0o755
+              | _stat.S_IXUSR | _stat.S_IXGRP | _stat.S_IXOTH)
+    assert "sin-rclone" in out and "Backup local en" in out
+    r = _sp.run(["bash", "-n", "/dev/stdin"], input=out, text=True,
+                stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, timeout=15)
+    assert r.returncode == 0
+    return p, bindir
+
+
+def test_backup_rclone_falla_local_ok_con_resumen(tmp_path):
+    """Sin rclone válido: rc 1 pero resumen local visible (opción B)."""
+    import os as _os
+    import subprocess as _sp
+    p, bindir = _backup_harness(tmp_path)
+    env = dict(_os.environ, PATH=str(bindir) + _os.pathsep + _os.environ["PATH"])
+    r = _sp.run(["bash", "scripts/backup.sh", "midb"], text=True,
+                stdout=_sp.PIPE, stderr=_sp.STDOUT, timeout=60,
+                cwd=str(p), env=env)
+    assert r.returncode == 1
+    assert "✓ Backup local en" in r.stdout
+    assert "falló la subida" in r.stdout
+    assert list((p / "backups").glob("full_backup_midb_day*.tar.gz"))
+
+
+def test_backup_sin_rclone_solo_local(tmp_path):
+    """--sin-rclone: rc 0 sin intentar subida."""
+    import os as _os
+    import subprocess as _sp
+    p, bindir = _backup_harness(tmp_path)
+    env = dict(_os.environ, PATH=str(bindir) + _os.pathsep + _os.environ["PATH"])
+    r = _sp.run(["bash", "scripts/backup.sh", "midb", "--sin-rclone"], text=True,
+                stdout=_sp.PIPE, stderr=_sp.STDOUT, timeout=60,
+                cwd=str(p), env=env)
+    assert r.returncode == 0
+    assert "solo local" in r.stdout
+    assert "Subiendo a Drive" not in r.stdout
+
+
+def test_run_backup_pasa_flags_y_espera_esc(monkeypatch, tmp_path, capsys):
+    """run_backup pasa --db/--sin-rclone, informa rc y espera ESC."""
+    import subprocess as _sp
+    proj = _proj_dev(tmp_path)
+    (proj / ".env").write_text("ENTORNO=produccion\n", encoding="utf-8")
+    (proj / "scripts").mkdir(exist_ok=True)
+    (proj / "scripts" / "backup.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    vistos = []
+    monkeypatch.setattr(_sp, "run",
+                        lambda *a, **k: vistos.append(a[0]) or SimpleNamespace(returncode=1))
+    import omc.flows as F
+    monkeypatch.setattr(F, "es_interactivo", lambda: True)
+    esperas = []
+    monkeypatch.setattr(F, "esperar_esc_volver",
+                        lambda *a, **k: esperas.append(1) or True)
+    run_backup(SimpleNamespace(proyecto=str(proj), db="midb", sin_rclone=True,
+                               local=False))
+    assert vistos[0] == ["./scripts/backup.sh", "midb", "--sin-rclone"]
+    out = capsys.readouterr().out
+    assert "terminó con errores" in out
+    assert esperas == [1]
+
+
+def test_run_backup_sin_tty_no_espera(monkeypatch, tmp_path, capsys):
+    """Sin tty no bloquea esperando tecla."""
+    import subprocess as _sp
+    import omc.flows as F
+    proj = _proj_dev(tmp_path)
+    (proj / ".env").write_text("ENTORNO=produccion\n", encoding="utf-8")
+    (proj / "scripts").mkdir(exist_ok=True)
+    (proj / "scripts" / "backup.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    monkeypatch.setattr(_sp, "run",
+                        lambda *a, **k: SimpleNamespace(returncode=0))
+    monkeypatch.setattr(F, "es_interactivo", lambda: False)
+
+    def _boom(*a, **k):
+        raise AssertionError("sin tty no debe esperar tecla")
+
+    monkeypatch.setattr(F, "esperar_esc_volver", _boom)
+    run_backup(SimpleNamespace(proyecto=str(proj)))
+    assert "✓ Backup terminado" in capsys.readouterr().out
+
+
+def test_cli_backup_flags():
+    from omc.cli import build_parser
+    args = build_parser().parse_args(["backup"])
+    assert args.db is None
+    args = build_parser().parse_args(["backup", "--db", "midb", "--sin-rclone"])
+    assert args.db == "midb" and args.sin_rclone is True
+    import pytest
+    with pytest.raises(SystemExit):
+        build_parser().parse_args(["backup", "--sin-rclone", "--local"])

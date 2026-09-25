@@ -129,10 +129,41 @@ fi
 docker compose exec -T db env PGPASSWORD="${POSTGRES_PASSWORD:-odoo}" \
   pg_restore -U odoo -d "$BD" --no-owner $LIMPIO < "$DUMP"
 
+# Valida el tgz de filestore y decide cómo aplicarlo (auto-ajuste con aviso).
+# Escribe FS_MODO=directo (trae filestore/...) o anidado (trae <algo>/...).
+# Retorna 1 si ilegible/vacío/inesperado: no tocar /data.
+validar_filestore() {
+  FS_MODO=""
+  [ -f "$FS" ] || { echo "  ⚠ filestore no encontrado: $FS (se omite)."; return 1; }
+  _listado=$(tar tzf "$FS" 2>/dev/null | grep -v '/$' | head -n 50 || true)
+  [ -n "$_listado" ] || { echo "  ⚠ filestore ilegible o vacío: $FS (se omite, sin borrar nada)."; return 1; }
+  if echo "$_listado" | grep -q '^filestore/'; then
+    FS_MODO="directo"
+    echo "  filestore con prefijo filestore/ OK."
+  elif echo "$_listado" | head -n 1 | grep -q '/'; then
+    FS_MODO="anidado"
+    echo "  ⚠ filestore sin prefijo filestore/ (trae $(echo "$_listado" | head -n 1 | cut -d/ -f1)/...): se ubica en /data/filestore/$BD."
+  else
+    echo "  ⚠ filestore con estructura inesperada (se omite, sin borrar nada):"
+    echo "$_listado" | head -n 5 | sed 's/^/    /'
+    return 1
+  fi
+}
+
 if [ -n "${FS:-}" ] && [ -f "$FS" ]; then
   echo "== Restaurando filestore =="
-  docker run --rm -v "${SLUG}_odoo-data:/data" -v "$PWD/$(dirname "$FS"):/in" \
-    alpine sh -c "rm -rf /data/filestore/$BD && mkdir -p /data/filestore && tar xzf /in/$(basename "$FS") -C /data"
+  if validar_filestore; then
+    if [ "$FS_MODO" = "anidado" ]; then
+      _dest="/data/filestore"
+    else
+      _dest="/data"
+    fi
+    docker run --rm -v "${SLUG}_odoo-data:/data" -v "$PWD/$(dirname "$FS"):/in" \
+      alpine sh -c "rm -rf /data/filestore/$BD && mkdir -p /data/filestore && tar xzf /in/$(basename "$FS") -C $_dest"
+    _n=$(docker run --rm -v "${SLUG}_odoo-data:/data" alpine sh -c "find /data/filestore/$BD -type f 2>/dev/null | wc -l")
+    echo "  filestore/$BD: ${_n} archivos."
+    [ "$_n" -gt 0 ] 2>/dev/null || echo "  ⚠ quedó vacío: revisá el tgz de origen."
+  fi
 else
   echo "(sin filestore, se omite)"
 fi

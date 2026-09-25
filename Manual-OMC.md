@@ -592,6 +592,8 @@ docker compose run --rm certbot renew && docker compose exec nginx nginx -s relo
 # restore.sh acepta full_backup_*.tar.gz, *.dump sueltos (+ filestore*.tgz hermano)
 # o carpeta con db.dump (+ filestore.tgz): ej ./scripts/restore.sh paintershop backups/manual
 # Avanzado: `omc restore --proyecto <ruta> --db <bd> --archivo <ruta> [--drive|--local]`.
+# El filestore se valida antes de borrar (debe traer filestore/<bd>/...; sin prefijo
+# se auto-ubica con aviso, ilegible/vacío aborta sin tocar nada) y se cuenta al final.
 # Retención: 7 diarios (day1..day7) + 4 domingos (week0..week3, local y Drive).
 # Probá el restore cada tanto en una BD de prueba: backup sin restore testeado no es backup.
 # Sin BD, backup.sh lista y eliges. Respalda rclone.conf en backups/.
@@ -603,6 +605,8 @@ docker compose run --rm certbot renew && docker compose exec nginx nginx -s relo
 # Rclone: host si está, si no el servicio `rclone` del compose (perfil backup).
 # Rclone sale del compose (servicio `rclone`, perfil `backup`): **nada que instalar en host**.
 # Menú 5 lo configura (incluso dentro del servicio) y verifica el remote.
+# Rclone es opcional: sin remote válido el backup local queda bien igual (rc 1 visible
+# con resumen + ESC para leerlo); `./scripts/backup.sh <bd> --sin-rclone` saltea Drive.
 # Neutralizar (solo dev): `./scripts/restore.sh <bd> <tgz> --neutralizar`
 # apaga crons y mail en la BD restaurada. Sin flag pregunta (default NO).
 # Avanzado: `omc restore --proyecto <ruta> --neutralizar`.

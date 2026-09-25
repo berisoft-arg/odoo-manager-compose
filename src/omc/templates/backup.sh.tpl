@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Backup {{PROYECTO}} — rotación day1..day7 + copia dominical + validaciones + rclone a Drive.
-# Uso: ./scripts/backup.sh [nombre_bd]   (ej: ./scripts/backup.sh midb)
+# Uso: ./scripts/backup.sh [nombre_bd] [--sin-rclone|--local]   (ej: ./scripts/backup.sh midb)
 # Sin argumento y con terminal: lista las bases y eliges.
+# --sin-rclone/--local: solo local, saltea la subida a Drive (VPS sin Drive).
 # Crontab sugerido: 0 3 * * * cd /ruta/{{PROYECTO}} && ./scripts/backup.sh <bd> >> backups/cron.log 2>&1
 set -euo pipefail
 cd "$(dirname "$0")/.."
@@ -13,9 +14,16 @@ fi
 REMOTE="${RCLONE_REMOTE:-gdrive}"
 RCFG="scripts/rclone.conf"
 [ -f "$RCFG" ] || RCFG="$HOME/.config/rclone/rclone.conf"
+SIN_RCLONE=0
 
 # --- 0. Nombre de la BD ---
-BD="${1:-}"
+BD=""
+for _a in "$@"; do
+  case "$_a" in
+    --sin-rclone|--local) SIN_RCLONE=1 ;;
+    *) if [ -z "$BD" ]; then BD="$_a"; fi ;;
+  esac
+done
 if [ -z "$BD" ]; then
   if [ -t 0 ]; then
     echo "Bases disponibles:"
@@ -91,24 +99,30 @@ else
 fi
 
 # --- 6. Subida a Google Drive (servicio rclone del compose: nada que instalar en host) ---
-echo "--- Subiendo a Drive ($REMOTE) ---"
-if ! grep -q "^\[" scripts/rclone.conf 2>/dev/null && [ -f "$HOME/.config/rclone/rclone.conf" ]; then
-  echo "(uso tu ~/.config/rclone/rclone.conf)"
-  cp "$HOME/.config/rclone/rclone.conf" scripts/rclone.conf
-fi
-RCLONE="docker compose --profile backup run --rm rclone"
-if $RCLONE copy /data "$REMOTE:{{PROYECTO}}/" \
-    --include "full_backup_${BD}_day${DIA}.tar.gz" --no-check-dest; then
-  echo "Subida OK."
-  if [ -n "${WEEK:-}" ] && [ -f "$WEEK" ]; then
-    $RCLONE copy /data "$REMOTE:{{PROYECTO}}/" \
-      --include "$(basename "$WEEK")" --no-check-dest \
-      && echo "Subida dominical OK." \
-      || echo "AVISO: falló la subida dominical (el local quedó bien)."
-  fi
+if [ "$SIN_RCLONE" = "1" ]; then
+  echo "(solo local: subida a Drive omitida por --sin-rclone)"
 else
-  echo "ERROR: falló la subida a Drive (el local quedó bien; revisa rclone.conf)." >&2
-  exit 1
+  echo "--- Subiendo a Drive ($REMOTE) ---"
+  if ! grep -q "^\[" scripts/rclone.conf 2>/dev/null && [ -f "$HOME/.config/rclone/rclone.conf" ]; then
+    echo "(uso tu ~/.config/rclone/rclone.conf)"
+    cp "$HOME/.config/rclone/rclone.conf" scripts/rclone.conf
+  fi
+  RCLONE="docker compose --profile backup run --rm rclone"
+  if $RCLONE copy /data "$REMOTE:{{PROYECTO}}/" \
+      --include "full_backup_${BD}_day${DIA}.tar.gz" --no-check-dest; then
+    echo "Subida OK."
+    if [ -n "${WEEK:-}" ] && [ -f "$WEEK" ]; then
+      $RCLONE copy /data "$REMOTE:{{PROYECTO}}/" \
+        --include "$(basename "$WEEK")" --no-check-dest \
+        && echo "Subida dominical OK." \
+        || echo "AVISO: falló la subida dominical (el local quedó bien)."
+    fi
+  else
+    du -sh "$FULL"
+    echo "✓ Backup local en $FULL"
+    echo "⚠ ERROR: falló la subida a Drive (revisa rclone.conf)." >&2
+    exit 1
+  fi
 fi
 du -sh "$FULL"
 echo "✓ Backup en $FULL"

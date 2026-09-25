@@ -54,10 +54,16 @@ def build_parser():
     for name, help_text in [
         ("monitor", "Monitor web"),
         ("github", "Configurar GitHub"),
-        ("backup", "Backup manual"),
     ]:
         s = sub.add_parser(name, help=help_text)
         s.add_argument("--proyecto", default=None)
+
+    bk = sub.add_parser("backup", help="Backup manual")
+    bk.add_argument("--proyecto", default=None)
+    bk.add_argument("--db", default=None, help="Base a respaldar (si falta, la pide)")
+    g3 = bk.add_mutually_exclusive_group()
+    g3.add_argument("--sin-rclone", action="store_true", help="Solo local, saltea Drive")
+    g3.add_argument("--local", action="store_true", help="Alias de --sin-rclone")
 
     re = sub.add_parser("restore", help="Restaurar BD")
     re.add_argument("--proyecto", default=None)
