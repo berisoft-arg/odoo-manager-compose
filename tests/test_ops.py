@@ -2466,3 +2466,19 @@ def test_run_monitor_servicio_pide_linger(monkeypatch, tmp_path, capsys):
     out = capsys.readouterr().out
     assert "enable-linger" in out
     assert ["sudo", "loginctl", "enable-linger", "tester"] in cmds
+
+
+def test_certbot_solo_a_demanda_sin_sleep():
+    """certbot no queda corriendo con up -d (profiles) ni rompe el entrypoint."""
+    from omc.core import render, template_text, sin_renderizar
+    for tpl, mapping in (
+        ("compose-nginx-block.yml.tpl",
+         {"PROYECTO": "demo", "DOMINIO": "t.com",
+          "CERTBOT_EMAIL": "a@b.c", "CERTBOT_STAGING": ""}),
+        ("proxy-compose.yml.tpl", {"PROYECTO": "proxy"}),
+    ):
+        out = render(template_text(tpl), mapping)
+        assert sin_renderizar(out) == []
+        assert "sleep infinity" not in out
+        assert 'profiles: ["certbot"]' in out
+        assert "image: certbot/certbot" in out

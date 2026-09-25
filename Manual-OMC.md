@@ -395,6 +395,11 @@ docker compose run --rm certbot certonly --webroot -w /var/www/certbot \
 docker compose exec nginx nginx -s reload
 ```
 
+> El servicio `certbot` lleva `profiles: ["certbot"]`: `up -d` no lo levanta
+> (antes quedaba caído con `unrecognized arguments: sleep infinity`, porque el
+> `ENTRYPOINT` de la imagen es el binario `certbot`); solo se usa a demanda
+> con `run --rm`.
+
 Estructura final (`nginx/nginx.conf` → sitio `odoo.conf`): 3 bloques —
 HTTP→HTTPS (ambos dominios), www→apex en 443, y principal con HSTS,
 `/web/database/manager` → 404, `/websocket` → `odoo:8072`,

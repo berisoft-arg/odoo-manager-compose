@@ -21,6 +21,8 @@ services:
         reservations: {cpus: '0.25', memory: 128M}
   certbot:
     image: certbot/certbot
+    # Solo a demanda (up -d no lo levanta; run explícito sí):
+    profiles: ["certbot"]
     volumes:
       - ./letsencrypt:/etc/letsencrypt
       - ./certbot-www:/var/www/certbot
@@ -28,7 +30,6 @@ services:
     #   docker compose run --rm certbot certonly --webroot -w /var/www/certbot \
     #     --email <email> --agree-tos --no-eff-email -d <dominio> -d www.<dominio>
     # Renovar todo (cron en host): ver README del proxy.
-    command: sleep infinity
 networks:
   omc-proxy:
     external: true

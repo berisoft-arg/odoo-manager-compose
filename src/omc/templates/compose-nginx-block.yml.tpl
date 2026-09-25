@@ -21,6 +21,8 @@
 
   certbot:
     image: certbot/certbot
+    # Solo a demanda (up -d no lo levanta; run explícito sí):
+    profiles: ["certbot"]
     volumes:
       - ./letsencrypt:/etc/letsencrypt
       - ./certbot-www:/var/www/certbot
@@ -29,4 +31,3 @@
     #     --email {{CERTBOT_EMAIL}} --agree-tos --no-eff-email -d {{DOMINIO}} -d www.{{DOMINIO}}{{CERTBOT_STAGING}}
     # Luego nginx.conf se reemplaza por la estructura HTTPS y se recarga.
     # Renovar (cron en host): docker compose run --rm certbot renew && docker compose exec nginx nginx -s reload
-    command: sleep infinity
