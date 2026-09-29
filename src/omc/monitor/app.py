@@ -369,7 +369,8 @@ def api_metricas(nombre):
     # --- AFIP WSAA (ARCA) por BD ---
     m["afip"] = []
     try:
-        bds = (m.get("pg") or {}).get("bases") or []
+        bds = [b["bd"] for b in ((m.get("postgres") or {}).get("bases") or [])
+               if isinstance(b, dict) and b.get("bd") not in ("postgres",)]
         for bd in bds:
             try:
                 r = subprocess.run(

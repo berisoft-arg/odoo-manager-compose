@@ -71,13 +71,20 @@ def test_afip_endpoint_con_mock(monkeypatch, tmp_path):
     not_after = fut.strftime("%b %d %H:%M:%S %Y GMT")
     fake_crt = "-----BEGIN CERTIFICATE-----\nMIIB\n-----END CERTIFICATE-----\n"
 
+    vistas_db = []
+
     def _fake_run(cmd, **k):
-        # psql para listar BDs (pg bases) – lo dejamos pasar al real? mockeamos todo
+        # psql para tamaños (pg bases, formato real datname|bytes)
         c = " ".join(cmd) if isinstance(cmd, list) else str(cmd)
-        if "psql" in c and "datname" in c:
-            # listar BDs: devolver una BD llamada demo
-            return subprocess.CompletedProcess(cmd, 0, stdout="demo\n", stderr="")
+        if "psql" in c and "pg_database_size" in c:
+            return subprocess.CompletedProcess(
+                cmd, 0, stdout="demo|123456\npostgres|7890\n", stderr="")
         if "psql" in c and "SELECT crt" in c:
+            # registrar la BD pedida con -d: debe ser el nombre plano
+            try:
+                vistas_db.append(cmd[cmd.index("-d") + 1])
+            except ValueError:
+                pass
             return subprocess.CompletedProcess(cmd, 0, stdout=fake_crt, stderr="")
         if "psql" in c and "common_name" in c:
             return subprocess.CompletedProcess(cmd, 0, stdout="TestAFIP\t20202803874\thomologation", stderr="")
@@ -99,13 +106,17 @@ def test_afip_endpoint_con_mock(monkeypatch, tmp_path):
         r = client.get("/api/metricas/demo", headers={"X-Token": "tok123"})
         assert r.status_code == 200
         data = r.get_json()
-        # Debe tener clave afip con un elemento, dias ~20, level warn
+        # afip con UN elemento (incondicional: vacío sería el bug de la clave pg)
         assert "afip" in data
         assert isinstance(data["afip"], list)
-        # Si el mock de pg bases no pobló, puede ser vacío; aceptamos 0 o 1
-        if data["afip"]:
-            assert data["afip"][0]["dias"] is not None
-            assert data["afip"][0]["level"] in ("ok", "warn", "critical", "vencido")
-            # 20 días → warn
-            if data["afip"][0]["dias"] == 20 or 18 <= data["afip"][0]["dias"] <= 22:
-                assert data["afip"][0]["level"] == "warn"
+        assert len(data["afip"]) == 1
+        a = data["afip"][0]
+        assert a["bd"] == "demo"
+        assert a["alias"] == "TestAFIP"
+        assert a["cuit"] == "20202803874"
+        assert a["type"] == "homologation"
+        # 20 días → warn
+        assert 18 <= a["dias"] <= 22
+        assert a["level"] == "warn"
+        # -d con nombre plano de BD (nunca dict, nunca la BD postgres)
+        assert vistas_db == ["demo"]
