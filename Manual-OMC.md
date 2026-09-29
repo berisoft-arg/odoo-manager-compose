@@ -4,7 +4,7 @@
 > indistintamente (`omc` es el comando).
 >
 > `omc` (paquete `pip install odoo-manager-compose`) — Odoo Manager Compose: crea, opera y migra
-> instancias Odoo con docker-compose. Versiones Odoo 17 / 18 / 19, entornos desarrollo / producción.
+> instancias Odoo con docker-compose. Versiones Odoo 17 / 18 / 19 / 20, entornos desarrollo / producción.
 >
 > **Uso diario: solo `omc`, sin argumentos.** Se abre el menú (opciones 1-13, `0` para salir)
 > y todo se elige ahí: crear, descargar módulos, localizar, nginx, rclone, monitor, GitHub,
@@ -143,7 +143,7 @@ rm -rf /opt/mi-proyecto
 ### 4.1 Entorno y versión
 
 El entorno cambia restart, debug y workers (ver tabla §1.2). La versión define Postgres
-vía `versions/*.env`: **17 → postgres:15; 18/19 → postgres:16**.
+vía `versions/*.env`: **17 → postgres:15; 18/19/20 → postgres:16**.
 
 ### 4.2 Puertos (validados antes de generar)
 
@@ -288,7 +288,8 @@ ahí solo se crea el proyecto (los módulos van por opción 2/3 después).
 Avanzado sin menú: `--localizacion argentina-adhoc` o `argentina-codize`. Tu flujo manual queda horneado en el Dockerfile:
 `python3-m2crypto` por apt (M2Crypto fuera del pip), `SECLEVEL=2→1` y `cache`
 de pyafipws con 777. No mezcles variantes AR en un proyecto
-(mismo nombre de módulo en dos repos).
+(mismo nombre de módulo en dos repos). En Odoo 20 el bundle AR aún no tiene
+rama `20.0` upstream: se omite con aviso hasta que AdHoc/Codize la publiquen.
 
 ---
 
@@ -915,6 +916,9 @@ correría con los binarios origen y no migraría nada) y `scripts/migrate_db.sh`
 **Limitaciones:**
 - OpenUpgrade exige pasar por cada versión intermedia: 17→19 se hace en dos corridas (17→18, 18→19);
   el asistente lo detecta y propone el primer salto.
+- Odoo 20: deploy directo con `omc crear --version 20` (imagen oficial + `postgres:16`).
+  La migración de BD hacia 20 depende de `OCA/OpenUpgrade@20.0`: si la rama no existe,
+  OMC avisa (`sin rama 20.0` / `No se pudo clonar OpenUpgrade`) y aborta limpio sin generar nada.
 - Siempre hay backup antes de migrar la BD (`scripts/backup.sh`).
 - Los módulos custom requieren migración manual del código (el migrador ayuda, no hace magia).
 

@@ -87,6 +87,8 @@
 
 ## [Sin publicar]
 
+- **Odoo 20 para desplegar**: nuevo `versions/20.env` (`odoo:20` oficial + `postgres:16`); `crear --version 20`, `localizar`, `sync`, `addons`, `dev` y monitor lo aceptan (default sigue `18`). Migración de BD hacia 20 depende de `OCA/OpenUpgrade@20.0`: el mecanismo es genérico y avisa/aborta limpio si falta. `Manual §4.1/§16`.
+
 ## [1.0.0]
 
 Primera versión documentada: asistente + menú en loop, creación/operación de

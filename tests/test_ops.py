@@ -2558,3 +2558,53 @@ def test_instalar_renew_cron_sin_tty_solo_informa(monkeypatch, tmp_path, capsys)
     assert F.instalar_renew_cron(tmp_path / "odoo") is False
     out = capsys.readouterr().out
     assert "0 3 * * 0 cd" in out
+
+
+def test_versions_20_env_render_sin_residuos():
+    """20.env entra al wheel (package-data) y renderiza sin placeholders."""
+    import glob as _glob
+    from omc.core import cargar_versions, render, sin_renderizar, template_text
+    assert "20" in cargar_versions()
+    info = cargar_versions()["20"]
+    assert info["odoo"] == "odoo:20" and info["postgres"] == "postgres:16"
+    assert _glob.glob(str(Path(__file__).parent.parent / "src" / "omc" / "versions" / "20.env"))
+    out = render(template_text("docker-compose.dev.yml.tpl"), {
+        "PROYECTO": "demo", "ODOO_VERSION": "20", "ODOO_IMAGE": "odoo:20",
+        "POSTGRES_IMAGE": "postgres:16", "ODOO_PORT": "8069",
+        "ODOO_GEVENT_PORT": "8072", "MAILPIT_PORT": "8025",
+        "ADDONS_PATH": "/mnt/extra-addons", "ODOO_BUILD_OR_IMAGE": "image: odoo:20",
+        "ODOO_DEPLOY": "", "DB_DEPLOY": "", "RCLONE_SERVICE": "",
+        "PG_SHARED_BUFFERS": "128MB", "PG_EFFECTIVE_CACHE": "512MB",
+        "PG_WORK_MEM": "8MB", "PG_MAINT_MEM": "64MB", "PG_MAX_CONN": "50",
+    })
+    assert sin_renderizar(out) == []
+
+
+def test_crear_version_20_dev(tmp_path, monkeypatch):
+    """crear --version 20 genera compose+conf con odoo:20/postgres:16."""
+    from types import SimpleNamespace
+    from omc.core import sin_renderizar
+    from omc.flows import crear_proyecto
+    monkeypatch.setenv("OMC_PROJECTS", str(tmp_path))
+    monkeypatch.delenv("OMC_HOME", raising=False)
+    args = SimpleNamespace(
+        entorno="desarrollo", version="20", nombre="v20",
+        puerto=18079, gevent_port=18083, salida=str(tmp_path / "v20"),
+        password="pgpass", admin_password="admin", no_input=True,
+        addon=[], sin_addons=True, bundle=None, localizacion=None,
+        deploy=False, sin_deploy=True, dominio=None, email=None,
+        sin_nginx=True, staging=False, odoo_cpus=None, odoo_mem=None,
+        db_cpus=None, db_mem=None, rclone_remote=None, vcpus=None,
+        ram_gb=None, ide="none", proyecto=None,
+    )
+    crear_proyecto(args)
+    comp = (tmp_path / "v20" / "docker-compose.yml").read_text(encoding="utf-8")
+    assert "odoo:20" in comp and "postgres:16" in comp
+    assert sin_renderizar(comp) == []
+    conf = (tmp_path / "v20" / "config" / "odoo.conf").read_text(encoding="utf-8")
+    assert "list_db = True" in conf
+
+
+def test_cli_crear_acepta_version_20():
+    from omc.cli import build_parser
+    assert build_parser().parse_args(["crear", "--version", "20"]).version == "20"

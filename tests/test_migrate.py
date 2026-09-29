@@ -33,6 +33,8 @@ def test_pasos_intermedios():
     assert _pasos_intermedios("18", "19") == ["19"]
     assert _pasos_intermedios("18", "18") == []
     assert _pasos_intermedios("19", "18") == []
+    assert _pasos_intermedios("19", "20") == ["20"]
+    assert _pasos_intermedios("18", "20") == ["19", "20"]
 
 
 def test_check_custom_sin_red():
@@ -199,3 +201,40 @@ def test_setup_openupgradelib_pip_falla(monkeypatch):
         stderr = "ERROR: no existe"
     monkeypatch.setattr(migrate.subprocess, "run", lambda *a, **k: _R())
     assert setup_openupgradelib() is False
+
+
+def test_check_module_branch_20(monkeypatch, tmp_path):
+    """Mecanismo genérico hacia 20.0: migrado si hay rama, si no motivo claro."""
+    _proyecto_fake(tmp_path)
+    migrate._RAMAS_CACHE.clear()
+    monkeypatch.setattr(migrate, "ramas_version",
+                        lambda url: ["19.0", "20.0"])
+    r = check_module_migrated("auditlog", "oca", "server-tools", "19", "20")
+    assert r["migrated"] is True
+    assert r["branch"] == "20.0"
+    migrate._RAMAS_CACHE.clear()
+    monkeypatch.setattr(migrate, "ramas_version", lambda url: ["19.0"])
+    r = check_module_migrated("auditlog", "oca", "server-tools", "19", "20")
+    assert r["migrated"] is False
+    assert "sin rama 20.0" in r["motivo"]
+
+
+def test_setup_openupgrade_sin_rama_falla_limpio(monkeypatch, tmp_path, capsys):
+    """Sin OpenUpgrade@20.0 upstream: falla limpio, sin generar nada."""
+    from omc.migrate import setup_openupgrade
+
+    def _boom(url, branch, dest):
+        raise SystemExit("Error: git clone -b 20.0 (rama inexistente)")
+
+    monkeypatch.setattr(migrate, "git_clone", _boom)
+    assert setup_openupgrade(tmp_path, "20") is False
+    assert "No se pudo clonar OpenUpgrade" in capsys.readouterr().out
+    assert not (tmp_path / "addons" / "openupgrade").exists()
+
+
+def test_generar_compose_migracion_20(tmp_path):
+    from omc.core import sin_renderizar
+    p = generar_compose_migracion(tmp_path, "20")
+    txt = p.read_text(encoding="utf-8")
+    assert sin_renderizar(txt) == []
+    assert "odoo:20" in txt

@@ -10,7 +10,7 @@ from .tui import es_interactivo
 
 def _add_crear_args(p):
     p.add_argument("--entorno", choices=ENTORNOS)
-    p.add_argument("--version", dest="version", choices=["17", "18", "19"])
+    p.add_argument("--version", dest="version", choices=["17", "18", "19", "20"])
     p.add_argument("--nombre", default=None)
     p.add_argument("--puerto", type=int, default=None)
     p.add_argument("--gevent-port", type=int, default=None,
@@ -290,7 +290,7 @@ def main(argv=None):
         from .core import leer_env, find_proyecto
         proj = find_proyecto(args.proyecto)
         ver = leer_env(proj).get("ODOO_VERSION", "")
-        if ver not in ("17", "18", "19"):
+        if ver not in ("17", "18", "19", "20"):
             sys.exit(f"No pude leer ODOO_VERSION válida en {proj}/.env.")
         aplicar_localizacion(proj, ver, args.localizacion)
     elif args.cmd == "list":

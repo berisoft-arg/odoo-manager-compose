@@ -1,6 +1,6 @@
 # Odoo Manager Compose (`omc`)
 
-Crea, opera y migra instancias **Odoo 17 / 18 / 19** con docker-compose.
+Crea, opera y migra instancias **Odoo 17 / 18 / 19 / 20** con docker-compose.
 Asistente interactivo + CLI + monitor web + migración OCA entre versiones.
 
 > Documentación completa en [Manual-OMC.md](Manual-OMC.md).
@@ -90,7 +90,7 @@ Menú avanzado (subcomandos directos como `omc crear --flags`,
 src/omc/            # paquete (cli, core, tui, github, gitutils, manifest,
                     #          addonsops, addons_cli, compose, flows, migrate, webapp)
 src/omc/templates/  # compose dev/prod/migrate, odoo.conf, nginx, Dockerfile, backup/restore, vscode-*.json.tpl, opencode.json.tpl, agents-proyecto.md.tpl
-src/omc/versions/   # 17.env (pg15), 18.env / 19.env (pg16)
+src/omc/versions/   # 17.env (pg15), 18.env / 19.env / 20.env (pg16)
 src/omc/data/       # catálogo de addons, localizaciones, bundle ejemplo
 src/omc/monitor/    # monitor Flask solo-lectura (lo sirve `omc-monitor`)
 tests/              # suite pytest

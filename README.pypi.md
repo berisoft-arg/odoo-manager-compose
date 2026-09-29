@@ -1,6 +1,6 @@
 # odoo-manager-compose
 
-Odoo Manager Compose: creador + helper + monitor + migración Odoo 17/18/19 con docker-compose.
+Odoo Manager Compose: creador + helper + monitor + migración Odoo 17/18/19/20 con docker-compose.
 
 > **Manual completo:** https://github.com/berisoft-arg/odoo-manager-compose/blob/master/Manual-OMC.md
 
