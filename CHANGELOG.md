@@ -93,6 +93,11 @@
 
 - **Fix monitor AFIP (nunca mostraba nada)**: el bloque leía la clave `pg` en vez de `postgres` (loop muerto) y pasaba dicts a `psql -d`; ahora itera `b["bd"]` saltando `postgres`. Tests incondicionales anti-enmascarado.
 
+## [1.3.2] - 2026-09-29
+
+- **Docs: actualizar repos descargados**: nueva `Manual §5.8` (`omc addons pull`, privados con token/SSH, `SHA` en `repos.json`, qué hacer después del `pull`: `sync` con `no`, `restart` y `update` por módulo).
+- **Restore `--update-web`**: tras restaurar, `-u web` opt-in (regenera adjuntos de reportes/estilos) + hint si salen rotos; checklist post-restore en `Manual §9.2` (verificar fuente primero con `ir_attachment`).
+
 ## [Sin publicar]
 
 ## [1.0.0]

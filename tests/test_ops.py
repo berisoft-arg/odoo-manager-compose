@@ -1175,6 +1175,7 @@ def test_restore_tpl_neutralizar_opt_in():
     assert sin_renderizar(out) == []
     assert "odoo neutralize -d" in out
     assert "--neutralizar" in out and "--sin-neutralizar" in out
+    assert "--update-web" in out and "-u web --stop-after-init" in out
     assert "JAMÁS en producción" in out  # nunca por default
     r = _sp.run(["bash", "-n", "/dev/stdin"], input=out, text=True,
                 stdout=_sp.DEVNULL, stderr=_sp.DEVNULL, timeout=15)
@@ -2608,3 +2609,27 @@ def test_crear_version_20_dev(tmp_path, monkeypatch):
 def test_cli_crear_acepta_version_20():
     from omc.cli import build_parser
     assert build_parser().parse_args(["crear", "--version", "20"]).version == "20"
+
+
+def test_run_restore_pasa_update_web(monkeypatch, tmp_path, capsys):
+    """run_restore propaga --update-web al script (opt-in, default apagado)."""
+    import subprocess as _sp
+    proj = _proj_dev(tmp_path)
+    (proj / ".env").write_text("ENTORNO=produccion\n", encoding="utf-8")
+    (proj / "scripts").mkdir(exist_ok=True)
+    (proj / "scripts" / "restore.sh").write_text("#!/bin/sh\n", encoding="utf-8")
+    vistos = []
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: vistos.append(a[0]))
+    run_restore(SimpleNamespace(proyecto=str(proj), update_web=True))
+    run_restore(SimpleNamespace(proyecto=str(proj)))
+    assert vistos[0] == ["./scripts/restore.sh", "--update-web"]
+    assert vistos[1] == ["./scripts/restore.sh"]
+    capsys.readouterr()
+
+
+def test_cli_restore_update_web():
+    from omc.cli import build_parser
+    args = build_parser().parse_args(["restore"])
+    assert args.update_web is False
+    args = build_parser().parse_args(["restore", "--update-web"])
+    assert args.update_web is True

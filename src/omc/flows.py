@@ -3258,6 +3258,8 @@ def run_restore(args):
         cmd.append("--neutralizar")
     if getattr(args, "sin_neutralizar", False):
         cmd.append("--sin-neutralizar")
+    if getattr(args, "update_web", False):
+        cmd.append("--update-web")
     subprocess.run(cmd, cwd=str(proj))
 
 

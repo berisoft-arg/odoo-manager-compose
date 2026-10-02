@@ -79,6 +79,8 @@ def build_parser():
                    help="Neutralizar tras restaurar (solo copias dev: apaga crons y mail)")
     g.add_argument("--sin-neutralizar", action="store_true",
                    help="No preguntar por neutralize")
+    re.add_argument("--update-web", action="store_true",
+                    help="Tras restaurar: -u web (regenera adjuntos de reportes/estilos)")
 
     sy = sub.add_parser("sync", help="Descargar módulos y aplicar")
     sy.add_argument("--proyecto", default=None)

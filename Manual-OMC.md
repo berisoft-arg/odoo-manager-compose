@@ -291,6 +291,26 @@ de pyafipws con 777. No mezcles variantes AR en un proyecto
 (mismo nombre de módulo en dos repos). En Odoo 20 el bundle AR aún no tiene
 rama `20.0` upstream: se omite con aviso hasta que AdHoc/Codize la publiquen.
 
+### 5.8 Actualizar repos ya descargados (pull)
+
+```bash
+cd /opt/mi-proyecto
+omc addons pull                  # todos los clones (git pull --ff-only)
+omc addons pull odoo-paintstore  # uno solo (nombre de la carpeta en addons/)
+```
+
+Hace `git pull --ff-only` en cada clon y anota el `SHA` nuevo en `addons/repos.json`
+(verificable con `omc addons status` y con `git -C addons/... rev-parse HEAD`).
+Si tocaste código dentro del clon, **no** mezcla: avisa y lo deja (commiteá/pusheá primero).
+
+- Privados por `https`: necesitan `GITHUB_TOKEN` (por env, o menú 7 que lo guarda en
+  `~/.config/omc/config.json` 0600, jamás en el proyecto); por `SSH` vale tu key, sin token.
+  Ej: `addons/berisoft-arg/odoo-paintstore` con remoto `https://github.com/berisoft-arg/odoo-paintstore.git`.
+- Después del `pull`, un `sync` respondiendo `no` correctamente no hace nada si no hay
+  módulos nuevos (ya está todo descargado y anotado). Lo que sigue es:
+  `docker compose restart odoo` + `omc update <modulo> --db <bd>` por cada módulo
+  cambiado (los que eliminan archivos, primero).
+
 ---
 
 ## 6. `omc addons` (referencia avanzada)
@@ -620,6 +640,13 @@ docker compose run --rm certbot renew --quiet && docker compose exec nginx nginx
 # Neutralizar (solo dev): `./scripts/restore.sh <bd> <tgz> --neutralizar`
 # apaga crons y mail en la BD restaurada. Sin flag pregunta (default NO).
 # Avanzado: `omc restore --proyecto <ruta> --neutralizar`.
+# Checklist post-restore (BD migrada de otro lado):
+# 1) llevar BD + filestore juntos (el filestore vive en el volumen, no en Postgres).
+# 2) ante la duda, verificar en la fuente: psql -c "SELECT count(*) FROM ir_attachment
+#    WHERE url LIKE '%asset_styles_company_report%';" — si da 0 ahí, nunca estuvo.
+# 3) si un reporte sale roto: ./scripts/restore.sh <bd> <origen> --update-web
+#    (o a mano: docker compose exec odoo odoo -d <bd> -u web --stop-after-init
+#    + regenerar assets compilados). Avanzado: `omc restore --update-web`.
 # Cron: 0 3 * * * cd /ruta/<proyecto> && ./scripts/backup.sh <bd> >> backups/cron.log 2>&1
 ```
 

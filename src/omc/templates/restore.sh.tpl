@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Restore {{PROYECTO}} — 100% autoguiado (también acepta args para automatizar).
 # Uso guiado: ./scripts/restore.sh
-# Uso directo: ./scripts/restore.sh <nombre_bd> <full_backup.tgz|*.dump|carpeta> [--drive|--local]
+# Uso directo: ./scripts/restore.sh <nombre_bd> <full_backup.tgz|*.dump|carpeta> [--drive|--local] [--update-web]
 #   --drive: baja el tgz de Google Drive (rclone) antes de restaurar.
 #   --local: fuerza local aunque haya Drive (default: local primero).
+#   --update-web: tras restaurar, -u web (regenera adjuntos de reportes/estilos).
 # Acepta full_backup_*.tar.gz, *.dump sueltos (+ filestore*.tgz hermano)
 # o carpeta con db.dump (+ filestore.tgz opcional).
 set -euo pipefail
@@ -18,10 +19,12 @@ SLUG=$(basename "$PWD" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-_')
 BD=""
 SRC=""
 DRIVE=0
+UPDATE_WEB=0
 for _a in "$@"; do
   case "$_a" in
     --drive) DRIVE=1 ;;
     --local) DRIVE=0 ;;
+    --update-web) UPDATE_WEB=1 ;;
     --neutralizar|--sin-neutralizar) ;;  # los procesa el bloque final
     *) if [ -z "$BD" ]; then BD="$_a"; elif [ -z "$SRC" ]; then SRC="$_a"; fi ;;
   esac
@@ -175,6 +178,15 @@ docker compose exec -T db psql -U odoo -d "$BD" -tAX -c "SELECT count(*) FROM ir
   && echo "(módulos instalados arriba)"
 echo "✓ Restaurado. Revisa: docker compose logs -f odoo"
 echo "  Ojo: si es otro servidor, ajusta web.base.url en Ajustes > Parámetros del sistema."
+if [ "$UPDATE_WEB" = "1" ]; then
+  echo "== Actualizando web (regenera adjuntos de reportes/estilos) =="
+  docker compose exec -T odoo odoo -d "$BD" -u web --stop-after-init \
+    && echo "(web actualizado: si un reporte salía roto, regenerá sus assets compilados)" \
+    || echo "AVISO: falló -u web (a mano: docker compose exec odoo odoo -d $BD -u web --stop-after-init)."
+else
+  echo "  Si algún reporte sale con formato roto: ./scripts/restore.sh $BD $SRC --update-web"
+  echo "  (o a mano: docker compose exec odoo odoo -d $BD -u web --stop-after-init + regenerar assets)."
+fi
 
 # --- Neutralizar (opcional, SOLO copias de desarrollo) ---
 # Apaga crons y servidores de mail en la BD para que nada real se dispare
