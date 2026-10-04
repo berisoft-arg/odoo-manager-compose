@@ -941,21 +941,18 @@ Sin imagen Docker: `omc` corre nativo y controla el Docker del host para los pro
 
 ### 15.2 En WSL2 (Windows)
 
-Todo se hace en ext4 de WSL (`~`); nada en `/mnt/c` (lento y con problemas
+Todo se hace en ext4 de WSL (`~` para el repo); nada en `/mnt/c` (lento y con problemas
 de permisos para Docker, git y Odoo).
 
-**Recursos: la mitad de tu equipo**, con piso mínimo para que Odoo + Postgres
-laburen dignos. **Piso:** 4GB RAM / 2 procesadores (menos que eso, ni intentar).
-**Sugerido:** mitad de la RAM y mitad de los CPUs (en un equipo típico de
-16GB/8 núcleos → 8GB/4). Se genera con este script (PowerShell, una vez;
-después `wsl --shutdown` y reabrir la terminal):
+**Recursos:** asignarle a WSL2 la mitad de la RAM y los CPUs del equipo
+(piso 4GB/2CPU) vía `%USERPROFILE%\.wslconfig`, más `wsl --shutdown`.
 
-```powershell
-$ram = [math]::Floor((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property capacity -Sum).Sum / 1GB / 2)
-$cpu = [math]::Floor((Get-CimInstance Win32_Processor).NumberOfLogicalProcessors / 2)
-if ($ram -lt 4) { $ram = 4 }; if ($cpu -lt 2) { $cpu = 2 }
-"[wsl2]`nmemory=${ram}GB`nprocessors=${cpu}" | Set-Content "$env:USERPROFILE\.wslconfig"
-wsl --shutdown
+**Convención `/opt` (igual que en VPS Linux):** los proyectos van a
+`/opt/<nombre>` (default, sin variables). Una sola vez con sudo, después
+no se necesita más:
+
+```bash
+sudo mkdir -p /opt && sudo chown $(id -u):$(id -g) /opt
 ```
 
 **Docker** (origen único oficial, como exige OMC): `docker-ce` + plugin compose
@@ -969,8 +966,6 @@ sudo apt update && sudo apt install -y python3-pip pipx git
 git config --global core.autocrlf false   # ANTES de clonar: un CRLF rompe los .sh/.tpl
 git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose
 pipx install odoo-manager-compose && pipx ensurepath  # reabrir terminal; o pip con --break (PEP 668)
-mkdir -p ~/omc-projects
-echo 'export OMC_PROJECTS=$HOME/omc-projects' >> ~/.bashrc
 echo 'export GITHUB_TOKEN=github_pat_...' >> ~/.bashrc  # privados; nunca se commitea
 echo "export ODOO_ADMIN_PASSWORD='un-master-seguro'" >> ~/.bashrc  # evita el default 'admin' (ver gotchas)
 source ~/.bashrc
@@ -982,15 +977,15 @@ source ~/.bashrc
 which omc && omc --version  # ~/.local/bin/omc, 1.3.2
 cd ~/odoo-manager-compose
 python3 -m pytest tests/ -q  # esperado: 209 passed
-omc crear --version 18 --entorno dev --nombre odoo18  # prueba en ~/omc-projects
+omc crear --version 18 --entorno dev --nombre odoo18  # prueba en /opt/odoo18
 ```
 
-Para comprobar que nunca toca `/opt` alcanza con crear un proyecto `prueba`
-por menú (opción 1) y verlo en `~/omc-projects/prueba`. Se borra así (con
+Para comprobar que escribe en `/opt`, crear un proyecto `prueba`
+por menú (opción 1) y verlo en `/opt/prueba`. Se borra así (con
 `down -v` primero para no dejar contenedores ni volúmenes huérfanos):
 
 ```bash
-cd ~/omc-projects/prueba && docker compose down -v && cd .. && rm -rf prueba
+cd /opt/prueba && docker compose down -v && cd .. && sudo rm -rf prueba
 ```
 
 Desde Windows se abre `http://localhost:<puerto>` (WSL lo reenvía solo).
