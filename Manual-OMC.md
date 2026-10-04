@@ -296,7 +296,8 @@ rama `20.0` upstream: se omite con aviso hasta que AdHoc/Codize la publiquen.
 ```bash
 cd /opt/mi-proyecto
 omc addons pull                  # todos los clones (git pull --ff-only)
-omc addons pull odoo-paintstore  # uno solo (nombre de la carpeta en addons/)
+omc addons pull odoo-paintstore  # uno solo (nombre exacto del campo `repo` de addons/repos.json,
+                                 # NO la URL; la rama se toma de la entrada)
 ```
 
 Hace `git pull --ff-only` en cada clon y anota el `SHA` nuevo en `addons/repos.json`
@@ -310,6 +311,31 @@ Si tocaste código dentro del clon, **no** mezcla: avisa y lo deja (commiteá/pu
   módulos nuevos (ya está todo descargado y anotado). Lo que sigue es:
   `docker compose restart odoo` + `omc update <modulo> --db <bd>` por cada módulo
   cambiado (los que eliminan archivos, primero).
+
+**Aplicar cambios (post-pull) — errores comunes:**
+
+- **Nunca** `docker compose exec odoo odoo -u <mod> ...`: el contenedor ya tiene Odoo
+  sirviendo el 8069 y el proceso nuevo falla con `OSError: Address already in use`.
+  El `-u` va siempre en contenedor **efímero**: `omc update <mod> --db <bd>`
+  (usa `docker compose run --rm`, no toca el servicio en marcha).
+  Alternativa con exec: parar primero (`compose stop odoo` → exec → `start odoo`), pero
+  deja el servicio caído durante el update; con `omc update` nunca se cae.
+- Si tocaste solo Python sin XML/modelos/datos, alcanza con
+  `docker compose restart odoo`; con XML, vistas, modelos o `__manifest__` cambiado,
+  el `omc update <mod> --db <bd>` es **obligatorio** (sin él Odoo sigue sirviendo lo viejo).
+
+**Tests del módulo: siempre en copia dev primero** (`--test-enable` crea registros de
+prueba en la BD indicada; en prod no se corre). Secuencia segura:
+
+```bash
+./scripts/backup.sh <bd_prod>
+./scripts/restore.sh <bd_dev> backups/<full_reciente> --neutralizar   # copia de prueba
+omc test <modulo> --db <bd_dev>        # tests acá (contenedor efímero)
+omc update <modulo> --db <bd_prod>     # recién después, a prod
+docker compose restart odoo
+```
+
+Directo a prod solo con backup hecho justo antes y el cambio ya probado en otro lado.
 
 ---
 
@@ -912,6 +938,60 @@ preinstalan: `omc migrar` ofrece bajarlos con pip si faltan (con `--yes`, solos)
 Sin imagen Docker: `omc` corre nativo y controla el Docker del host para los proyectos.
 
 **Actualizar:** `pipx upgrade odoo-manager-compose` o `pip install --upgrade odoo-manager-compose`. **Licencia:** AGPL-3.0 (`LICENSE` en el repo).
+
+### 15.2 En WSL2 (Windows)
+
+Todo se hace en ext4 de WSL (`~`); nada en `/mnt/c` (lento y con problemas
+de permisos para Docker, git y Odoo).
+
+**Recursos: la mitad de tu equipo**, con piso mínimo para que Odoo + Postgres
+laburen dignos. **Piso:** 4GB RAM / 2 procesadores (menos que eso, ni intentar).
+**Sugerido:** mitad de la RAM y mitad de los CPUs (en un equipo típico de
+16GB/8 núcleos → 8GB/4). Se genera con este script (PowerShell, una vez;
+después `wsl --shutdown` y reabrir la terminal):
+
+```powershell
+$ram = [math]::Floor((Get-CimInstance Win32_PhysicalMemory | Measure-Object -Property capacity -Sum).Sum / 1GB / 2)
+$cpu = [math]::Floor((Get-CimInstance Win32_Processor).NumberOfLogicalProcessors / 2)
+if ($ram -lt 4) { $ram = 4 }; if ($cpu -lt 2) { $cpu = 2 }
+"[wsl2]`nmemory=${ram}GB`nprocessors=${cpu}" | Set-Content "$env:USERPROFILE\.wslconfig"
+wsl --shutdown
+```
+
+**Docker** (origen único oficial, como exige OMC): `docker-ce` + plugin compose
+v2 dentro de Ubuntu-WSL, usuario en el grupo `docker`, y `docker compose version`
+tiene que decir v2.x.
+
+**OMC** (terminal de Ubuntu-WSL):
+
+```bash
+sudo apt update && sudo apt install -y python3-pip pipx git
+git config --global core.autocrlf false   # ANTES de clonar: un CRLF rompe los .sh/.tpl
+git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose
+pipx install odoo-manager-compose && pipx ensurepath  # reabrir terminal; o pip con --break (PEP 668)
+mkdir -p ~/omc-proyectos
+echo 'export OMC_PROJECTS=$HOME/omc-proyectos' >> ~/.bashrc
+echo 'export GITHUB_TOKEN=github_pat_...' >> ~/.bashrc  # privados; nunca se commitea
+source ~/.bashrc
+```
+
+**Verificación:**
+
+```bash
+cd ~/odoo-manager-compose
+omc --version  # 1.3.2
+python3 -m pytest tests/ -q  # esperado: 209 passed
+omc crear --version 18 --entorno dev --nombre odoo18  # prueba en ~/omc-proyectos
+```
+
+Desde Windows se abre `http://localhost:<puerto>` (WSL lo reenvía solo).
+Para editar: VSCode + extensión *WSL* (`code .` desde `~`).
+
+Gotchas WSL: `autocrlf false` antes del clone (si ya clonaste con CRLF, borrar
+y clonar de nuevo); master password seguro en `config/odoo.conf` (con el
+default `admin`, el auto-guardado de Odoo 17 revienta con `DuplicateSectionError`
+si el conf trae `[queue_job]`, y después todo da `Access Denied`); si el
+8069/8072 está ocupado, crear con puertos libres.
 
 ---
 
