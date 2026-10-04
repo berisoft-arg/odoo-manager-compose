@@ -100,7 +100,7 @@
 
 ## [Sin publicar]
 
-- **Docs: instalar OMC en WSL2**: nuevo `Manual §15.2` (recursos = mitad del equipo con piso 4GB/2CPU vía script PowerShell, docker-ce oficial, clone en `~` con `autocrlf false`, `OMC_PROJECTS` en home, verificación y gotchas); resumen en `README ## Instalación` + perfiles de entorno en `AGENTS.md`; se elimina `Guia-WSL.md` plegada al Manual.
+- **Docs: instalar OMC en WSL2**: nuevo `Manual §15.2` (recursos = mitad del equipo con piso 4GB/2CPU vía script PowerShell, docker-ce oficial, clone en `~` con `autocrlf false`, `OMC_PROJECTS` en home, `ODOO_ADMIN_PASSWORD` preventivo, verificación con `which`, proyecto `prueba` + limpieza con `down -v`, y gotchas); resumen en `README ## Instalación` + perfiles de entorno en `AGENTS.md`; se elimina `Guia-WSL.md` plegada al Manual. Convención de carpeta en inglés: `~/omc-projects` (mensaje visible + docs).
 
 - **Docs: aplicar cambios post-pull**: `Manual §5.8` ahora explica que el `-u` va con `omc update` (contenedor efímero; con `exec` sale `Address already in use`), cuándo basta `restart`, la receta dev-primero (`backup → restore --neutralizar → omc test → omc update prod`) y que `addons pull <repo>` filtra por el campo `repo` de `repos.json` (no la URL).
 

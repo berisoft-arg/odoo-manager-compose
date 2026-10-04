@@ -126,7 +126,7 @@ def asegurar_escribible(ruta: Path, rol: str) -> None:
         f"{base} no es escribible ({rol}). Una vez en el host:\n"
         f"  sudo mkdir -p {base} && sudo chown $(id -u):$(id -g) {base}\n"
         f"Después no se necesita sudo. Alternativa sin sudo: "
-        f"OMC_PROJECTS=~/omc-proyectos OMC_HOME=~/omc-data omc"
+        f"OMC_PROJECTS=~/omc-projects OMC_HOME=~/omc-data omc"
     )
 
 

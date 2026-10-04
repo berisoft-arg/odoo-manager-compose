@@ -60,7 +60,7 @@ which omc  # debe dar /usr/local/bin/omc desde root y desde admin
 
 > Detalle en [Manual-OMC §15](Manual-OMC.md#15-instalación-venv-sin-docker), [§15.2 WSL2](Manual-OMC.md#152-en-wsl2-windows) y [§17 VPS](Manual-OMC.md#17-vps-producción).
 > En WSL2: `wsl --install`, Docker oficial + compose v2, clone en `~` (nunca
-> `/mnt/c`), `OMC_PROJECTS=~/omc-proyectos`; recursos = mitad del equipo
+> `/mnt/c`), `OMC_PROJECTS=~/omc-projects`; recursos = mitad del equipo
 > (piso 4GB/2 CPU). Detalle completo en §15.2.
 > `omc` funciona desde cualquier directorio (`/opt`, `/home`, `/tmp`); los proyectos
 > siempre se escriben en `/opt/<nombre>` (`$OMC_PROJECTS`, default `/opt`).

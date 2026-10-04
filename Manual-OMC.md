@@ -969,19 +969,28 @@ sudo apt update && sudo apt install -y python3-pip pipx git
 git config --global core.autocrlf false   # ANTES de clonar: un CRLF rompe los .sh/.tpl
 git clone https://github.com/berisoft-arg/odoo-manager-compose.git ~/odoo-manager-compose
 pipx install odoo-manager-compose && pipx ensurepath  # reabrir terminal; o pip con --break (PEP 668)
-mkdir -p ~/omc-proyectos
-echo 'export OMC_PROJECTS=$HOME/omc-proyectos' >> ~/.bashrc
+mkdir -p ~/omc-projects
+echo 'export OMC_PROJECTS=$HOME/omc-projects' >> ~/.bashrc
 echo 'export GITHUB_TOKEN=github_pat_...' >> ~/.bashrc  # privados; nunca se commitea
+echo "export ODOO_ADMIN_PASSWORD='un-master-seguro'" >> ~/.bashrc  # evita el default 'admin' (ver gotchas)
 source ~/.bashrc
 ```
 
 **Verificación:**
 
 ```bash
+which omc && omc --version  # ~/.local/bin/omc, 1.3.2
 cd ~/odoo-manager-compose
-omc --version  # 1.3.2
 python3 -m pytest tests/ -q  # esperado: 209 passed
-omc crear --version 18 --entorno dev --nombre odoo18  # prueba en ~/omc-proyectos
+omc crear --version 18 --entorno dev --nombre odoo18  # prueba en ~/omc-projects
+```
+
+Para comprobar que nunca toca `/opt` alcanza con crear un proyecto `prueba`
+por menú (opción 1) y verlo en `~/omc-projects/prueba`. Se borra así (con
+`down -v` primero para no dejar contenedores ni volúmenes huérfanos):
+
+```bash
+cd ~/omc-projects/prueba && docker compose down -v && cd .. && rm -rf prueba
 ```
 
 Desde Windows se abre `http://localhost:<puerto>` (WSL lo reenvía solo).
