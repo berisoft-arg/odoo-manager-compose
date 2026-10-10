@@ -98,9 +98,13 @@
 - **Docs: actualizar repos descargados**: nueva `Manual §5.8` (`omc addons pull`, privados con token/SSH, `SHA` en `repos.json`, qué hacer después del `pull`: `sync` con `no`, `restart` y `update` por módulo).
 - **Restore `--update-web`**: tras restaurar, `-u web` opt-in (regenera adjuntos de reportes/estilos) + hint si salen rotos; checklist post-restore en `Manual §9.2` (verificar fuente primero con `ir_attachment`).
 
-## [Sin publicar]
+## [1.4.0] - 2026-10-10
 
-- **Docs: instalar OMC en WSL2**: nuevo `Manual §15.2` (recursos = mitad del equipo con piso 4GB/2CPU vía script PowerShell, docker-ce oficial, clone en `~` con `autocrlf false`, `OMC_PROJECTS` en home, `ODOO_ADMIN_PASSWORD` preventivo, verificación con `which`, proyecto `prueba` + limpieza con `down -v`, y gotchas); resumen en `README ## Instalación` + perfiles de entorno en `AGENTS.md`; se elimina `Guia-WSL.md` plegada al Manual. Convención de carpeta en inglés: `~/omc-projects` (mensaje visible + docs). WSL2 en `/opt` como en VPS (sudo único, sin variables; recursos solo mencionados).
+- **Blindaje anti-incidentes (post-mortem Sep-Oct 2026)**: veto a `omc addons quitar` (OMC suma, no quita; con test de rechazo); snapshot pre-mutate en `backups/.omc-snap/` con restore en una línea (sync, deps --fix, add, pull, bundle, update); regen de `addons_path` merge-only (preserva paths extraños + aviso + diff); bundle sin skips silenciosos (pendientes en `addons/.bundle-pendientes.json` + `--retry` + verificación post); stale bloqueante antes del rebuild; guard de árbol sucio antes de `sparse-checkout`; chequeo BD-vs-disco post-sync; `load_repos` aborta ante json corrupto; historial append-only de operaciones (comando + respuestas + snapshots); receta documentada de recuperación (Update Apps List + install/upgrade, los `uninstallable` no se revierten solos). `Manual §6`, README, tests por guard.
+- **Convención en inglés**: carpeta ejemplo `~/omc-projects` en mensaje visible + docs.
+- **Docs: instalar OMC en WSL2**: nuevo `Manual §15.2` (docker-ce oficial, clone en `~` con `autocrlf false`, convención `/opt` como en VPS con sudo único, recursos solo mencionados, `ODOO_ADMIN_PASSWORD` preventivo, verificación con `which`, proyecto `prueba` + limpieza con `down -v`, y gotchas); resumen en `README ## Instalación` + perfiles de entorno en `AGENTS.md`; se elimina `Guia-WSL.md` plegada al Manual.
+
+## [Sin publicar]
 
 - **Docs: aplicar cambios post-pull**: `Manual §5.8` ahora explica que el `-u` va con `omc update` (contenedor efímero; con `exec` sale `Address already in use`), cuándo basta `restart`, la receta dev-primero (`backup → restore --neutralizar → omc test → omc update prod`) y que `addons pull <repo>` filtra por el campo `repo` de `repos.json` (no la URL).
 

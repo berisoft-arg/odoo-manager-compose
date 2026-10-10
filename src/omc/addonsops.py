@@ -2,11 +2,13 @@
 import json
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 from .core import load_catalog, leer_env
 from .github import git_auth_args, org_desde_url, org_subdir, resolve_repo
-from .gitutils import git_clone, run
+from .gitutils import git_clone, run, arbol_sucio
+from .tui import ask_si_no
 from .manifest import (
     indice_modulos_disco, iterar_modulos, leer_manifest,
     load_repos, save_repos, base_total, anotar_sha,
@@ -29,14 +31,30 @@ def addons_path_desde_repos(proyecto: Path) -> str:
 
 
 def actualizar_addons_path(proyecto: Path):
-    """Reescribe la línea addons_path de config/odoo.conf según repos.json."""
+    """Reescribe la línea addons_path de config/odoo.conf (merge-only).
+
+    Suma los paths de repos.json SIN borrar paths extraños (clones a mano):
+    lo no registrado se conserva + aviso. Imprime diff.
+    """
     import re
     conf = Path(proyecto) / "config" / "odoo.conf"
     if not conf.exists():
         print("  ⚠ No existe config/odoo.conf, no se actualizó addons_path.")
         return
     txt = conf.read_text(encoding="utf-8")
-    nuevo = "addons_path = " + addons_path_desde_repos(proyecto)
+    base = [p for p in addons_path_desde_repos(proyecto).split(",") if p.strip()]
+    m = re.search(r"^addons_path\s*=\s*(.*)$", txt, re.M)
+    viejos = [x.strip() for x in m.group(1).split(",") if x.strip()] if m else []
+    en_base = set(base)
+    extra = [p for p in viejos if p not in en_base]
+    final = base + extra
+    if extra:
+        print(f"  ⚠ addons_path: se conservan {len(extra)} paths no registrados: "
+              f"{' '.join(extra)}")
+    agregados = [p for p in final if p not in set(viejos)]
+    if agregados:
+        print(f"  + addons_path: {' '.join(agregados)}")
+    nuevo = "addons_path = " + ",".join(final)
     if re.search(r"^addons_path\s*=.*$", txt, re.M):
         txt = re.sub(r"^addons_path\s*=.*$", nuevo, txt, count=1, flags=re.M)
     else:
@@ -188,6 +206,13 @@ def add_modules(proyecto: Path, org: str, repo: str, url: str, branch: str, modu
     else:
         # agregar módulos al sparse-checkout (add = no borra los anteriores)
         print(f"Agregando módulos: {' '.join(nuevos) if nuevos else '(ya estaban)'}")
+        if nuevos and arbol_sucio(dest):
+            print(f"  ⚠ {repo}: tiene cambios locales sin commitear.")
+            if sys.stdin.isatty() and not ask_si_no(
+                    "¿Continuar igual (sparse-checkout puede mover archivos)?",
+                    default_no=True):
+                print("  (omitido por árbol sucio: commiteá/stasheá y reintentá)")
+                return [], list(modulos)
         if nuevos:
             # con auth: add/reapply bajan blobs del promisor (privados fallan sin header)
             run(["git"] + git_auth_args(url) + ["sparse-checkout", "add"] + nuevos,

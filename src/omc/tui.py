@@ -530,9 +530,16 @@ def _leer(prompt: str) -> str:
 def ask_texto(prompt: str, default: str = "") -> str:
     """Texto libre con default. No interactivo/EOF -> default."""
     if not es_interactivo():
-        return default
-    r = _leer(f"{prompt} [{default}]: ") if default else _leer(f"{prompt}: ")
-    return r if r else default
+        res = default
+    else:
+        r = _leer(f"{prompt} [{default}]: ") if default else _leer(f"{prompt}: ")
+        res = r if r else default
+    try:
+        from .core import historial_responder as _hr
+        _hr(prompt, res)
+    except Exception:  # noqa: BLE001
+        pass
+    return res
 
 
 def ask_opcion(prompt: str, opciones: list, default=None, aliases: dict = None) -> str:
@@ -540,23 +547,34 @@ def ask_opcion(prompt: str, opciones: list, default=None, aliases: dict = None) 
     if default is None:
         default = opciones[-1] if opciones else ""
     if not es_interactivo():
-        return default
-    aliases = aliases or {}
-    print(f"\n{prompt}")
-    for i, op in enumerate(opciones, 1):
-        print(f"  {i}) {op}")
-    while True:
-        r = _leer(f"Elige [1-{len(opciones)}] (default {default}): ")
-        if not r:
-            return default
-        if r.isdigit() and 1 <= int(r) <= len(opciones):
-            return opciones[int(r) - 1]
-        if r in opciones:
-            return r
-        low = r.lower().replace(" ", "")
-        if low in aliases:
-            return aliases[low]
-        print(err("  Opción no válida, intenta de nuevo."))
+        res = default
+    else:
+        aliases = aliases or {}
+        print(f"\n{prompt}")
+        for i, op in enumerate(opciones, 1):
+            print(f"  {i}) {op}")
+        res = default
+        while True:
+            r = _leer(f"Elige [1-{len(opciones)}] (default {default}): ")
+            if not r:
+                break
+            if r.isdigit() and 1 <= int(r) <= len(opciones):
+                res = opciones[int(r) - 1]
+                break
+            if r in opciones:
+                res = r
+                break
+            low = r.lower().replace(" ", "")
+            if low in aliases:
+                res = aliases[low]
+                break
+            print(err("  Opción no válida, intenta de nuevo."))
+    try:
+        from .core import historial_responder as _hr
+        _hr(prompt, res)
+    except Exception:  # noqa: BLE001
+        pass
+    return res
 
 
 def ask_si_no(prompt: str, default_no: bool = True) -> bool:

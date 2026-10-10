@@ -87,6 +87,11 @@ Menú avanzado (subcomandos directos como `omc crear --flags`,
 `omc doctor --fix`): ver [Manual-OMC](Manual-OMC.md). Para agentes/CI:
 `omc list/doctor --json`, `omc logs/update/test` y `AGENTS.md` + `opencode.json` (instrucciones para agentes).
 
+> Blindaje: OMC suma, no quita (sin comando de borrado); cada operación mutante
+> guarda snapshot (`backups/.omc-snap/`) e historial (ver `tail`), el regen de
+> `addons_path` preserva paths extraños y los guards frenan antes del rebuild.
+> Detalle en [§6](Manual-OMC.md#6-omc-addons-referencia-avanzada).
+
 ## Estructura del repo
 
 ```text

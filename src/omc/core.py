@@ -137,6 +137,85 @@ def default_salida(nombre: str, explicit=None) -> Path:
     return (projects_home() / nombre).resolve()
 
 
+SNAP_FILES = ("addons/repos.json", "config/odoo.conf", "requirements-odoo.txt",
+              "Dockerfile")
+SNAP_KEEP = 5
+
+
+def snapshot_proyecto(proyecto, archivos=SNAP_FILES, motivo="") -> Path | None:
+    """Copia timestampada a backups/.omc-snap/ + imprime el restore. Nunca falla."""
+    import shutil as _sh
+    from datetime import datetime as _dt
+    try:
+        p = Path(proyecto)
+        if not p.is_dir():
+            return None
+        base = p / "backups" / ".omc-snap"
+        dest = base / _dt.now().strftime("%Y%m%d-%H%M%S")
+        dest.mkdir(parents=True, exist_ok=True)
+        for rel in archivos:
+            f = p / rel
+            if f.is_file():
+                _sh.copy2(f, dest / Path(rel).name)
+        viejos = sorted(base.iterdir())
+        for v in viejos[:-SNAP_KEEP]:
+            _sh.rmtree(v, ignore_errors=True) if v.is_dir() else v.unlink(missing_ok=True)
+        historial_linea(f"SNAP {motivo or 'cambios'} -> {dest}")
+        print(f"  Snapshot en {dest} (restore: cp {dest}/<archivo> su lugar).")
+        return dest
+    except OSError:
+        return None
+
+
+_HIST_ACTUAL = None
+_HIST_MAX = 1024 * 1024
+
+
+def historial_iniciar(proyecto, comando: str) -> Path | None:
+    """Abre (append) el log de operaciones en data_home()/.omc-historial/. Nunca falla."""
+    global _HIST_ACTUAL
+    try:
+        slug = re.sub(r"[^A-Za-z0-9_.-]+", "_", Path(proyecto).name) or "omc"
+        d = data_home() / ".omc-historial"
+        try:
+            d.mkdir(parents=True, exist_ok=True)
+        except OSError:
+            d = Path.home() / ".local" / "share" / "omc" / ".omc-historial"
+            d.mkdir(parents=True, exist_ok=True)
+        ruta = d / f"{slug}.log"
+        if ruta.exists() and ruta.stat().st_size > _HIST_MAX:
+            ruta.replace(d / f"{slug}.log.1")
+        _HIST_ACTUAL = ruta
+        historial_linea(f"CMD {comando} en {Path(proyecto)}")
+        return ruta
+    except OSError:
+        _HIST_ACTUAL = None
+        return None
+
+
+def historial_cerrar() -> None:
+    """Cierra el log activo (si hay)."""
+    global _HIST_ACTUAL
+    _HIST_ACTUAL = None
+
+
+def historial_linea(texto: str) -> None:
+    """Agrega línea timestampada al log activo. No-op sin iniciar. Nunca falla."""
+    if not _HIST_ACTUAL:
+        return
+    try:
+        from datetime import datetime as _dt
+        with open(_HIST_ACTUAL, "a", encoding="utf-8") as f:
+            f.write(f"{_dt.now().isoformat(timespec='seconds')} {texto}\n")
+    except OSError:
+        historial_cerrar()
+
+
+def historial_responder(pregunta: str, respuesta) -> None:
+    """Registra qué se eligió en un prompt (para peritaje)."""
+    historial_linea(f"RESP {pregunta} => {respuesta}")
+
+
 def find_proyecto(explicit=None) -> Path:
     """Resuelve proyecto: explícito, cwd con addons/, o sys.exit guiado (igual que antes)."""
     import sys as _sys
@@ -492,9 +571,12 @@ class Project:
             return []
         try:
             data = json.loads(f.read_text(encoding="utf-8"))
-            return data if isinstance(data, list) else []
-        except ValueError:
-            return []
+            if isinstance(data, list):
+                return data
+            raise ValueError(f"{f} no trae una lista")
+        except ValueError as e:
+            raise ValueError(f"addons/repos.json corrupto en {self.ruta} ({e}). "
+                             f"Restauralo desde backups/.omc-snap/ antes de seguir.") from e
 
     def guardar_repos(self, repos: list) -> None:
         """Escritura atómica (tmp + rename) para no corromper ante cortes."""

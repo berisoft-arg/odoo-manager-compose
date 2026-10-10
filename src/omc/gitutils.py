@@ -55,6 +55,17 @@ def git_red(repo_dir):
     return ["git"] + git_auth_args(url)
 
 
+def arbol_sucio(repo_dir) -> bool:
+    """True si `git status` muestra cambios (tracked o no). False si no es repo o falla."""
+    try:
+        r = subprocess.run(["git", "-C", str(repo_dir), "status", "--porcelain"],
+                           text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                           timeout=30)
+        return r.returncode == 0 and bool((r.stdout or "").strip())
+    except Exception:  # noqa: BLE001
+        return False
+
+
 def git_clone(url: str, branch: str, dest: str, reintentos: int = 1):
     run(["git"] + git_auth_args(url) + ["clone", "--filter=blob:none", "--sparse",
          "--depth", "1", "-b", branch, url, dest], reintentos=reintentos)

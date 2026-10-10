@@ -3,8 +3,7 @@
 Uso:
   omc addons sync [--proyecto P] [--bundle F] [--odoo 18] [--yes] [--skip-install] [--no-deploy]
   omc addons add --repo server-tools [--org oca] [--odoo 18] mod1 mod2 [...]
-  omc addons quitar [--proyecto P] mod1 [...]
-  omc addons bundle [--proyecto P] [--archivo F] [--odoo 18]
+  omc addons bundle [--proyecto P] [--archivo F] [--odoo 18] [--retry]
   omc addons export-bundle [--proyecto P] [--salida F] [--force]
   omc addons pull [--proyecto P] [repo]
   omc addons status [--proyecto P]
@@ -20,7 +19,7 @@ import sys
 from types import SimpleNamespace
 
 _SUBS = (
-    "sync", "add", "quitar", "bundle", "export-bundle", "pull", "status",
+    "sync", "add", "bundle", "export-bundle", "pull", "status",
     "fix-paths", "instalar", "check-deps", "deps",
     "list-catalog", "list-modules", "catalog-add",
 )
@@ -29,7 +28,7 @@ _FLAGS_VALOR = {
     "--proyecto", "-p", "--odoo", "--branch", "--org", "--repo", "--url",
     "--bundle", "--archivo", "--salida", "--desc", "--rclone-remote",
 }
-_FLAGS_BOOL = {"--yes", "--skip-install", "--no-deploy", "--force", "--fix"}
+_FLAGS_BOOL = {"--yes", "--skip-install", "--no-deploy", "--force", "--fix", "--retry"}
 
 
 def _parse(argv):
@@ -73,6 +72,7 @@ def _parse(argv):
         no_deploy=bool(vals.get("no_deploy")),
         force=bool(vals.get("force")),
         fix=bool(vals.get("fix")),
+        retry=bool(vals.get("retry")),
     )
     return sub, ns, pos
 
@@ -101,9 +101,6 @@ def main(argv=None) -> int:
             print("Falta el repo: add --repo R [--org O] mod...")
             return 2
         _f.run_add(ns)
-    elif sub == "quitar":
-        ns.modulos = pos
-        _f.run_quitar(ns)
     elif sub == "sync":
         _f.run_sync(ns)
     elif sub == "bundle":

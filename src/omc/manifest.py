@@ -31,9 +31,12 @@ def _load_repos_raw(p: Path) -> list:
     import json
     try:
         data = json.loads(f.read_text(encoding="utf-8"))
-        return data if isinstance(data, list) else []
-    except ValueError:
-        return []
+        if isinstance(data, list):
+            return data
+        raise ValueError(f"{f} no trae una lista")
+    except ValueError as e:
+        raise ValueError(f"addons/repos.json corrupto en {p} ({e}). "
+                         f"Restauralo desde backups/.omc-snap/ antes de seguir.") from e
 
 
 def save_repos(proyecto, repos: list) -> None:

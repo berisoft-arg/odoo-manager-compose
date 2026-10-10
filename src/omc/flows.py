@@ -58,6 +58,9 @@ from .core import (
     ENTORNOS,
     merge_json,
     sin_renderizar,
+    snapshot_proyecto,
+    historial_iniciar,
+    historial_cerrar,
 )
 from .compose import (
     generar_compose,
@@ -85,6 +88,7 @@ from .gitutils import (
     list_remote_topdirs,
     remote_head,
     run,
+    arbol_sucio,
 )
 from .manifest import (
     leer_manifest,
@@ -1554,12 +1558,16 @@ def run_deps(args):
     # Con tty (y sin --yes) se pregunta aunque venga --fix: si no está ni en el
     # catálogo, el usuario puede indicar dónde buscarlo en vez de loopear en vano.
     preguntar = sys.stdin.isatty() and not getattr(args, "yes", False)
+    historial_iniciar(proyecto, "deps")
+    if getattr(args, "fix", False):
+        snapshot_proyecto(proyecto, motivo="deps --fix")
     for _ in range(5):  # loop por cadenas (A->B->C)
         avance = False
         reporte, mismo_repo, total = analizar_depends(proyecto)
         if getattr(args, "porcelain", False):
             n = len(mismo_repo) + len(total)
             print("TODO_RESUELTO" if n == 0 else f"PENDIENTES:{n}")
+            historial_cerrar()
             return
         print(seccion("\n== Dependencias entre módulos =="))
         foco = {
@@ -1576,6 +1584,7 @@ def run_deps(args):
             print("  (los nuevos no declaran depends)")
         if not mismo_repo and not total:
             print("✓ Todo resuelto.")
+            historial_cerrar()
             return
         if mismo_repo:
             print("\nDisponibles en repos ya clonados (mismo repo, sin descargar):")
@@ -1679,14 +1688,21 @@ def run_deps(args):
                     add_modules(proyecto, org, repo, url, br, [dep])
         if not args.fix:
             print("\nCon --fix agrego mismo-repo y sugeridos automáticamente.")
+            historial_cerrar()
             return
         if not mismo_repo and not total:
             return
         # fix: sparse-checkout add por repo
-        if mismo_repo:
-            avance = True
         for rp, mods in sorted(mismo_repo.items()):
             dest = proyecto / rp
+            if arbol_sucio(dest):
+                print(f"  ⚠ {rp}: tiene cambios locales sin commitear.")
+                if sys.stdin.isatty() and not ask_si_no(
+                        "¿Continuar igual (sparse-checkout puede mover archivos)?",
+                        default_no=True):
+                    print("  (omitido por árbol sucio: commiteá/stasheá y reintentá)")
+                    continue
+            avance = True
             print(f"Agregando en {rp}: {' '.join(sorted(mods))}")
             run(git_red(str(dest)) + ["sparse-checkout", "add"] + sorted(mods), cwd=str(dest))
             run(git_red(str(dest)) + ["sparse-checkout", "reapply"], cwd=str(dest))
@@ -1700,9 +1716,11 @@ def run_deps(args):
             # Nada nuevo para traer (ni sugeridos, ni mismo-repo, ni guía del
             # usuario): repetir sería buscar lo mismo. Se informa y se sale.
             print("\nSin avances: lo pendiente se resuelve a mano (u omítelo).")
+            historial_cerrar()
             return
         print("  (reviso cadenas una vez más...)")
     print("⚠ Cadena muy larga, revisa a mano lo que falte.")
+    historial_cerrar()
 
 
 def solo_install(proyecto, ver=None, ofrecer_aplicar=True):
@@ -2025,6 +2043,70 @@ def asegurar_queue_job_conf(proyecto, args=None) -> bool:
     return True
 
 
+def inconsistencias_bd_disco(proyecto):
+    """[(bd, módulo)] instalados en BD sin manifest visible. None si no se pudo chequear."""
+    import subprocess as _sp
+    from .manifest import indice_modulos_disco, base_total, CORE_SIEMPRE
+    proyecto = Path(proyecto)
+
+    def _psql(bd, sql):
+        try:
+            r = _sp.run(["docker", "compose", "exec", "-T", "db", "psql", "-U", "odoo",
+                         "-d", bd, "-tAX", "-c", sql],
+                        cwd=str(proyecto), text=True, stdout=_sp.PIPE,
+                        stderr=_sp.DEVNULL, timeout=30)
+        except Exception:  # noqa: BLE001
+            return None
+        if r.returncode != 0:
+            return None
+        return getattr(r, "stdout", "") or ""
+
+    out = _psql("postgres", "SELECT datname FROM pg_database WHERE datistemplate=false "
+                            "AND datname NOT IN ('postgres');")
+    if out is None:
+        return None
+    bds = [x.strip() for x in out.splitlines() if x.strip()]
+    try:
+        idx = indice_modulos_disco(proyecto)
+    except Exception:  # noqa: BLE001
+        return None
+    base, base_ok = base_total(proyecto)
+    if not base_ok:
+        return None  # sin contenedores: falso-positivos de core; no se chequea
+    visibles = set(idx) | set(base) | set(CORE_SIEMPRE)
+    malas = []
+    for bd in bds:
+        inst = _psql(bd, "SELECT name FROM ir_module_module WHERE state='installed';")
+        if inst is None:
+            continue
+        for m in (x.strip() for x in inst.splitlines()):
+            if m and m not in visibles:
+                malas.append((bd, m))
+    return sorted(set(malas))
+
+
+def faltantes_disco(proyecto) -> list:
+    """Módulos registrados en repos.json ausentes en disco (ordenados, únicos)."""
+    from .manifest import load_repos
+    proyecto = Path(proyecto)
+    faltantes = []
+    try:
+        for _r in load_repos(proyecto):
+            _base = proyecto / (_r.get("path") or "")
+            if not _r.get("path"):
+                continue
+            if _r.get("single"):
+                if not _base.is_dir():
+                    faltantes.append(f"{_r.get('repo')}/(repo)")
+                continue
+            for _m in _r.get("modules", []):
+                if _m and not (_base / _m).is_dir():
+                    faltantes.append(f"{_r.get('repo')}/{_m}")
+    except Exception:  # noqa: BLE001
+        pass
+    return sorted(set(faltantes))
+
+
 def run_sync(args):
     """Post-despliegue: instala (bundle opcional) + deps + Dockerfile + rebuild.
 
@@ -2063,11 +2145,14 @@ def run_sync(args):
         return fotos
 
     antes = foto_estado()
+    historial_iniciar(proyecto, "sync")
+    snapshot_proyecto(proyecto, motivo="sync")
     # 1) Instalador: mismo del inicio (bundle o lista numerada), salvo --bundle/--skip-install
     if args.bundle:
         print(f"== Bundle {args.bundle} ==", flush=True)
         br = args.branch or (odoo_to_branch(args.odoo) if args.odoo else "")
         if not run_bundle_file(proyecto, args.bundle, br, args.odoo):
+            historial_cerrar()
             sys.exit("Falló el bundle, no sigo.")
     elif not args.skip_install and sys.stdin.isatty() and not args.yes:
         if ask_si_no(
@@ -2075,8 +2160,10 @@ def run_sync(args):
             default_no=True,
         ):
             if not solo_install(proyecto, ofrecer_aplicar=False):
+                historial_cerrar()
                 return  # Nada elegido en puerta_instalacion: vuelta al menú sin ruido
         else:
+            historial_cerrar()
             return  # no hay nada nuevo: vuelve al menú sin mostrar deps ni aplicar
     # Auto-export: fusiona el estado actual en addons-bundle.json (lo crea si
     # falta) para clonar esta instancia después. Suma sin borrar entradas manuales.
@@ -2106,12 +2193,34 @@ def run_sync(args):
 
     run_check_deps(SimpleNamespace(proyecto=str(proyecto), json_out=False))
     run_deps_simple(proyecto, enfocar=nuevos_nombres)
+    _falt_previos = faltantes_disco(proyecto)
+    if _falt_previos and sys.stdin.isatty() and not args.yes:
+        print(f"\n⚠ Módulos registrados pero no descargados ({len(_falt_previos)}): "
+              f"{' '.join(_falt_previos)}")
+        if not ask_si_no("¿Continuar igual (el rebuild no los incluye)?",
+                         default_no=True):
+            print(f"\nRe-descargalos y repetí, o aplicá a mano: cd {proyecto} "
+                  f"&& docker compose up -d --build")
+            historial_cerrar()
+            return
+    _mal_bd = inconsistencias_bd_disco(proyecto)
+    if _mal_bd is None:
+        print("  (BD/contenedores no disponibles: sin chequeo BD vs disco)")
+    elif _mal_bd:
+        det = ", ".join(f"{b}:{m}" for b, m in _mal_bd[:10])
+        print(f"\n⚠ Instalados en BD sin manifest visible ({len(_mal_bd)}): {det}")
+        if sys.stdin.isatty() and not args.yes and not ask_si_no(
+                "¿Continuar igual (puede dar 500)?", default_no=True):
+            print("\nRegistrá los repos (add), reiniciá y repetí el sync.")
+            historial_cerrar()
+            return
     req = proyecto / "requirements-odoo.txt"
     # --- MENÚ ÚNICO: aplicar todo (conf ya mapeada al descargar) ---
     if args.no_deploy:
         print(
             f"\nPara aplicar: cd {proyecto} && docker compose up -d --build && docker compose restart odoo"
         )
+        historial_cerrar()
         return
     det_nuevos = ", ".join(sorted(nuevos))
     # Config de módulos especiales antes de aplicar (ej queue_job -> odoo.conf)
@@ -2125,6 +2234,7 @@ def run_sync(args):
         )
     if not aplicar:
         print(f"\nPara aplicar luego: cd {proyecto} && docker compose up -d --build")
+        historial_cerrar()
         return
     # 1) traer faltantes (mismo-repo/catálogo) con re-verificación en cadena
     from types import SimpleNamespace
@@ -2169,19 +2279,7 @@ def run_sync(args):
             print("⚠ Falló el restart. Revisa: docker compose ps")
     # 5) resumen: registrados pero ausentes en disco (omitidos o desaparecidos de la rama)
     try:
-        from .manifest import load_repos
-        faltantes = []
-        for _r in load_repos(proyecto):
-            _base = proyecto / (_r.get("path") or "")
-            if not _r.get("path"):
-                continue
-            if _r.get("single"):
-                if not _base.is_dir():
-                    faltantes.append(f"{_r.get('repo')}/(repo)")
-                continue
-            for _m in _r.get("modules", []):
-                if _m and not (_base / _m).is_dir():
-                    faltantes.append(f"{_r.get('repo')}/{_m}")
+        faltantes = faltantes_disco(proyecto)
         if faltantes:
             print(f"\n⚠ Módulos registrados pero no descargados ({len(faltantes)}): "
                   f"{' '.join(sorted(set(faltantes)))}")
@@ -2206,6 +2304,7 @@ def run_sync(args):
             pass
     except Exception:  # noqa: BLE001
         pass
+    historial_cerrar()
 
 
 def run_export_bundle(args):
@@ -2238,11 +2337,14 @@ def run_add(args):
         sys.exit("Indica --branch 18.0 o --odoo 18")
     cat = load_catalog()
     org, repo, url = resolve_repo(args.org, args.repo, args.url, cat)
+    historial_iniciar(proyecto, f"add {org}/{repo}")
+    snapshot_proyecto(proyecto, motivo=f"add {org}/{repo}")
     add_modules(proyecto, org, repo, url, branch, args.modulos)
     asegurar_queue_job_conf(proyecto, args)
     print(
         "\nReinicia Odoo para verlos: docker compose restart odoo && docker compose logs -f odoo"
     )
+    historial_cerrar()
 
 
 def run_bundle_file(proyecto, archivo: str, branch: str = "", odoo: str = "") -> bool:
@@ -2272,8 +2374,40 @@ def run_bundle_file(proyecto, archivo: str, branch: str = "", odoo: str = "") ->
         return False
 
 
+def _pendientes_bundle_path(proyecto: Path) -> Path:
+    return Path(proyecto) / "addons" / ".bundle-pendientes.json"
+
+
+def _pendientes_bundle_leer(proyecto: Path) -> list:
+    f = _pendientes_bundle_path(proyecto)
+    if not f.exists():
+        return []
+    try:
+        data = json.loads(f.read_text(encoding="utf-8"))
+        return data if isinstance(data, list) else []
+    except ValueError:
+        return []
+
+
+def _pendientes_bundle_guardar(proyecto: Path, pendientes: list) -> None:
+    f = _pendientes_bundle_path(proyecto)
+    if not pendientes:
+        try:
+            f.unlink(missing_ok=True)
+        except OSError:
+            pass
+        return
+    f.write_text(json.dumps(pendientes, indent=2, ensure_ascii=False) + "\n",
+                 encoding="utf-8")
+
+
 def run_bundle(args):
-    """Descarga TODOS los repos/módulos de una plantilla bundle de una sola vez."""
+    """Descarga TODOS los repos/módulos de una plantilla bundle de una sola vez.
+
+    Sin skips silenciosos: lo pendiente (fallos + entradas sin módulos) se
+    guarda en addons/.bundle-pendientes.json y se reanuda con --retry.
+    Al final verifica que todo quedó visible en disco.
+    """
     proyecto = find_proyecto(args.proyecto)
     default_branch = args.branch or (
         odoo_to_branch(args.odoo) if args.odoo else read_env_branch(proyecto)
@@ -2293,11 +2427,33 @@ def run_bundle(args):
     if isinstance(entradas, dict):
         entradas = [{"org": k, **v} for k, v in entradas.items()]
     cat = load_catalog()
+    historial_iniciar(proyecto, f"bundle {Path(args.archivo).name}")
+    snapshot_proyecto(proyecto, motivo="bundle")
+    if getattr(args, "retry", False):
+        pendientes = _pendientes_bundle_leer(proyecto)
+        if not pendientes:
+            print("Sin pendientes: nada que reintentar.")
+            historial_cerrar()
+            return
+        print(f"Reintentando {len(pendientes)} pendientes...")
+        frescas = {e.get("repo"): e for e in entradas
+                   if isinstance(e, dict) and e.get("repo")}
+        entradas = []
+        for p in pendientes:
+            repo = p.get("repo", "")
+            base = dict(frescas.get(repo, {}))
+            base.update({k: v for k, v in p.items() if k not in ("motivo",)})
+            if repo and base.get("repo"):
+                entradas.append(base)
     total_ok, total_fail = [], []
+    pendientes_nuevos = []
     for e in entradas:
         if not isinstance(e, dict) or e.get("repo", "").startswith("_"):
             continue
         if not e.get("repo") or not e.get("modules"):
+            print(f"  ⚠ {e.get('repo') or e}: sin módulos en el bundle "
+                  f"(agregalos o trae todo el repo); queda pendiente.")
+            pendientes_nuevos.append({**e, "motivo": "sin módulos en el bundle"})
             continue
         branch = e.get("branch") or default_branch
         if not branch:
@@ -2311,22 +2467,44 @@ def run_bundle(args):
         ok, fail = add_modules(proyecto, org, repo, url, branch, e["modules"])
         total_ok += [f"{repo}/{m}" for m in ok]
         total_fail += [f"{repo}/{m}" for m in fail]
+        if fail:
+            pendientes_nuevos.append({**e, "motivo": f"fallaron: {' '.join(fail)}"})
     print(f"\nBundle listo: {len(total_ok)} ok, {len(total_fail)} omitidos.")
     if total_fail:
         print(f"  Omitidos: {' '.join(total_fail)}")
+    _pendientes_bundle_guardar(proyecto, pendientes_nuevos)
+    if pendientes_nuevos:
+        print(f"  Quedaron {len(pendientes_nuevos)} pendientes "
+              f"(addons/.bundle-pendientes.json): reintenta con bundle --retry.")
+    print("== Verificación post-bundle ==")
+    no_visibles = []
+    for r in load_repos(proyecto):
+        base = proyecto / (r.get("path") or "")
+        for m in r.get("modules", []) or []:
+            if m and not (base / m).is_dir():
+                no_visibles.append(f"{r.get('repo')}/{m}")
+    if no_visibles:
+        print(f"  ⚠ No visibles en disco ({len(no_visibles)}): "
+              f"{' '.join(sorted(set(no_visibles)))}")
+    else:
+        print("  ✓ Todo lo registrado está en disco.")
     asegurar_queue_job_conf(proyecto, args)
     print(
         "\nReinicia Odoo para verlos: docker compose restart odoo && docker compose logs -f odoo"
     )
+    historial_cerrar()
 
 
 def run_pull(args):
     proyecto = find_proyecto(args.proyecto)
     repos = load_repos(proyecto)
+    historial_iniciar(proyecto, "pull")
+    snapshot_proyecto(proyecto, archivos=("addons/repos.json",), motivo="pull")
     if args.repo:
         repos = [r for r in repos if r["repo"] == args.repo]
     if not repos:
         print("Nada para actualizar (repos.json vacío).")
+        historial_cerrar()
         return
     for r in repos:
         p = proyecto / r["path"]
@@ -2340,6 +2518,7 @@ def run_pull(args):
     from .manifest import save_repos
     save_repos(proyecto, repos)
     print("Listo. Reinicia: docker compose restart odoo")
+    historial_cerrar()
 
 
 def run_status(args):
@@ -2357,38 +2536,6 @@ def run_status(args):
         for m in r.get("modules", []):
             ok = "✓" if (proyecto / r["path"] / m).is_dir() else "✗ falta en disco"
             print(f"  {ok} {m}")
-
-
-def run_quitar(args):
-    """Saca módulos (sparse-checkout set sin ellos). Si no queda ninguno, borra el clon."""
-    proyecto = find_proyecto(args.proyecto)
-    repos = load_repos(proyecto)
-    # buscar entradas que contengan cada módulo
-    pendientes = {m: None for m in args.modulos}
-    for r in repos:
-        for m in args.modulos:
-            if m in r.get("modules", []) and pendientes[m] is None:
-                pendientes[m] = r
-    for m, r in pendientes.items():
-        if r is None:
-            print(f"  ⚠ {m}: no está registrado en repos.json.")
-            continue
-        dest = proyecto / r["path"]
-        resto = sorted(set(r["modules"]) - {m})
-        if resto and dest.is_dir():
-            run(git_red(str(dest)) + ["-C", str(dest), "sparse-checkout", "set"] + resto)
-            run(git_red(str(dest)) + ["-C", str(dest), "sparse-checkout", "reapply"])
-            r["modules"] = resto
-            print(f"  ✓ {m} fuera de {r['path']} (quedan: {' '.join(resto)})")
-        else:
-            import shutil as _sh
-
-            _sh.rmtree(dest, ignore_errors=True)
-            repos[:] = [x for x in repos if x.get("path") != r["path"]]
-            print(f"  ✓ {m} fuera y clon {r['path']} eliminado (no quedaba nada).")
-    save_repos(proyecto, repos)
-    actualizar_addons_path(proyecto)
-    print("Reinicia Odoo: docker compose restart odoo")
 
 
 def run_fix_paths(args):
@@ -3310,9 +3457,11 @@ def run_update(args):
         sys.exit("Indicá el módulo: omc update <modulo> [--db <bd>].")
     bd = _elegir_bd(proj, getattr(args, "db", None), f"actualizar {mod}")
     print(f"Actualizando {mod} en {bd} ...")
+    historial_iniciar(proj, f"update {mod}@{bd}")
     r = subprocess.run(["docker", "compose", "run", "--rm", "odoo",
                         "odoo", "-d", bd, "-u", mod, "--stop-after-init"],
                        cwd=str(proj))
+    historial_cerrar()
     if r.returncode != 0:
         sys.exit(f"Falló el update de {mod} (revisá el log de arriba).")
     print(f"✓ {mod} actualizado. Reiniciá: docker compose restart odoo")

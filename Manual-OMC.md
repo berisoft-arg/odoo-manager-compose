@@ -350,11 +350,10 @@ Dentro del proyecto (rama por defecto = la del `.env`), o desde afuera con `--pr
 omc addons list-catalog [--org oca|adhoc|cybrosys|mates]
 omc addons list-modules server-tools --odoo 18
 omc addons add --repo server-tools --org oca --odoo 18 auditlog
-omc addons bundle addons-bundle.json --odoo 18
+omc addons bundle addons-bundle.json --odoo 18 [--retry]  # --retry: solo pendientes del intento anterior
 omc addons status          # repos + presencia en odoo.conf
 omc addons pull [--repo X] # git pull --ff-only de lo descargado
 omc addons check-deps      # external_dependencies -> requirements-odoo.txt
-omc addons quitar <mod>      # saca módulos (si no queda nada, borra el clon)
 omc addons deps [--fix]    # depends entre módulos (ok/base/mismo-repo/falta)
 omc addons sync [--bundle X] [--yes] [--no-deploy] [--skip-install]
 omc addons export-bundle [--salida F] [--force]
@@ -386,6 +385,31 @@ Notas:
 - Si un nombre existe en varios orgs (ej `account-financial-tools` en OCA y AdHoc),
   manda tu `--org`.
 - Tras `sparse-checkout add` se hace `reapply` para materializar el árbol.
+- **OMC suma, no quita**: no existe comando para sacar módulos (se vetó a propósito).
+  Para retirar uno a mano (con backup previo): 1) desinstalarlo en la BD (Apps),
+  2) `rm -rf addons/<org>/<repo>`, 3) sacar su entrada de `addons/repos.json`,
+  4) `omc addons fix-paths` (solo regenera el path), 5) restart. Nunca renombrar
+  carpetas de módulos: `git mv` + commit + push + `pull` + `sync`.
+- **`addons_path` es merge-only**: el regen suma paths de `repos.json` y conserva
+  los extraños (clones a mano) con aviso; imprime diff. Lo no registrado igual
+  conviene registrarlo (`add`) antes del próximo sync.
+- **Bundle sin skips silenciosos**: entrada sin módulos avisa y queda en
+  `addons/.bundle-pendientes.json`; `bundle --retry` reanuda; al final verifica
+  que todo quedó visible en disco.
+- **Cada operación mutante** (`sync`, `deps --fix`, `add`, `pull`, `bundle`, `update`)
+  guarda snapshot en `backups/.omc-snap/<fecha>/` (restore: `cp` de vuelta) y
+  escribe historial append-only en `<datos>/.omc-historial/<proyecto>.log`
+  (`<datos>` = `OMC_HOME`, o `~/odoo-manager-compose`, o `/opt/omc`, o
+  `~/.local/share/omc` como fallback; ver con `tail`). Incluye comando,
+  respuestas a prompts y snapshots.
+- **Guards antes del rebuild**: módulos registrados sin descargar piden confirmar;
+  clon con cambios sin commitear avisa antes del `sparse-checkout`;
+  instalados en BD sin manifest visible bloquean con alerta. `repos.json`
+  corrupto aborta (restaurar desde el snapshot).
+- **Recuperación si Odoo no ve módulos** (paths/BD): 1) verificar `addons_path`
+  trae el repo + clon en disco, 2) registrar si falta (`add`), 3) restart,
+  4) Apps → Update Apps List, 5) Upgrade/instalar. Los estados `uninstallable`
+  no se revierten solos: requieren install/upgrade explícito (`-i`/`-u`).
 
 ---
 

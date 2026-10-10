@@ -2633,3 +2633,452 @@ def test_cli_restore_update_web():
     assert args.update_web is False
     args = build_parser().parse_args(["restore", "--update-web"])
     assert args.update_web is True
+
+
+def _fake_home(monkeypatch, tmp_path):
+    monkeypatch.setenv("HOME", str(tmp_path))
+    for v in ("OMC_HOME", "ODOO_CREATOR_HOME", "OMC_PROJECTS"):
+        monkeypatch.delenv(v, raising=False)
+
+
+def test_snapshot_proyecto_guarda_y_avisa_restore(tmp_path, capsys):
+    from omc.core import snapshot_proyecto
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "config").mkdir(parents=True)
+    (p / "addons" / "repos.json").write_text("[]", encoding="utf-8")
+    (p / "config" / "odoo.conf").write_text("[options]\n", encoding="utf-8")
+    dest = snapshot_proyecto(p, motivo="sync")
+    assert dest is not None and (dest / "repos.json").is_file()
+    assert (dest / "odoo.conf").is_file()
+    out = capsys.readouterr().out
+    assert "Snapshot en" in out and "restore" in out
+
+
+def test_snapshot_proyecto_nunca_falla(tmp_path):
+    from omc.core import snapshot_proyecto
+    assert snapshot_proyecto(tmp_path / "inexistente", motivo="x") is None
+
+
+def test_historial_iniciar_linea_responder(monkeypatch, tmp_path):
+    _fake_home(monkeypatch, tmp_path)
+    from omc.core import historial_iniciar, historial_linea, historial_responder, historial_cerrar
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    ruta = historial_iniciar(proj, "sync")
+    assert ruta is not None and ruta.is_file()
+    historial_responder("¿Descargar?", "no")
+    historial_linea("SNAP x -> y")
+    txt = ruta.read_text(encoding="utf-8")
+    assert "CMD sync" in txt and "RESP" in txt and "SNAP" in txt
+    historial_cerrar()
+    from omc import core as _c
+    assert _c._HIST_ACTUAL is None
+
+
+def test_historial_rota_al_mega(monkeypatch, tmp_path):
+    _fake_home(monkeypatch, tmp_path)
+    from omc import core as _c
+    from omc.core import historial_iniciar, historial_cerrar
+    proj = tmp_path / "proj"
+    proj.mkdir()
+    d = tmp_path / ".local" / "share" / "omc" / ".omc-historial"
+    d.mkdir(parents=True)
+    (d / "proj.log").write_bytes(b"x" * (_c._HIST_MAX + 1))
+    ruta = historial_iniciar(proj, "sync")
+    assert (d / "proj.log.1").is_file()
+    assert ruta.read_text(encoding="utf-8").count("CMD sync") == 1
+    historial_cerrar()
+
+
+def test_ask_sin_historial_no_hace_nada(monkeypatch, tmp_path, capsys):
+    _fake_home(monkeypatch, tmp_path)
+    from omc import core as _c
+    from omc.tui import ask_si_no, ask_opcion
+    _c._HIST_ACTUAL = None
+    assert ask_si_no("¿X?", default_no=True) is False
+    assert ask_opcion("¿Y?", ["a", "b"], "b") == "b"
+    capsys.readouterr()
+
+
+def test_run_deps_porcelain_escribe_historial(monkeypatch, tmp_path, capsys):
+    _fake_home(monkeypatch, tmp_path)
+    from types import SimpleNamespace
+    from omc.flows import run_deps
+    proj = tmp_path / "proj"
+    (proj / "addons").mkdir(parents=True)
+    (proj / "addons" / "repos.json").write_text("[]", encoding="utf-8")
+    run_deps(SimpleNamespace(proyecto=str(proj), porcelain=True))
+    logs = list(tmp_path.rglob("*.log"))
+    assert len(logs) == 1
+    assert "CMD deps" in logs[0].read_text(encoding="utf-8")
+    capsys.readouterr()
+
+
+def test_actualizar_addons_path_conserva_extranos(tmp_path, capsys):
+    from omc.addonsops import actualizar_addons_path
+    import json as _json
+    p = tmp_path / "proj"
+    (p / "addons" / "oca" / "web").mkdir(parents=True)
+    (p / "config").mkdir(parents=True)
+    (p / "addons" / "repos.json").write_text(_json.dumps([
+        {"path": "addons/oca/web", "modules": ["web_responsive"]},
+    ]), encoding="utf-8")
+    (p / "config" / "odoo.conf").write_text(
+        "[options]\naddons_path = /mnt/extra-addons/custom,/mnt/extra-addons/oca/web,/mnt/extra-addons/oca/spreadsheet\n",
+        encoding="utf-8")
+    actualizar_addons_path(p)
+    out = (p / "config" / "odoo.conf").read_text(encoding="utf-8")
+    assert "/mnt/extra-addons/oca/spreadsheet" in out  # extraño conservado
+    assert "/mnt/extra-addons/oca/web" in out
+    txt = capsys.readouterr().out
+    assert "se conservan 1 paths no registrados" in txt
+
+
+def test_actualizar_addons_path_idempotente(tmp_path, capsys):
+    from omc.addonsops import actualizar_addons_path
+    import json as _json
+    p = tmp_path / "proj"
+    (p / "addons" / "oca" / "web").mkdir(parents=True)
+    (p / "config").mkdir(parents=True)
+    (p / "addons" / "repos.json").write_text(_json.dumps([
+        {"path": "addons/oca/web", "modules": []},
+    ]), encoding="utf-8")
+    (p / "config" / "odoo.conf").write_text("[options]\n", encoding="utf-8")
+    actualizar_addons_path(p)
+    primera = (p / "config" / "odoo.conf").read_text(encoding="utf-8")
+    actualizar_addons_path(p)
+    assert (p / "config" / "odoo.conf").read_text(encoding="utf-8") == primera
+    capsys.readouterr()
+
+
+def test_addons_quitar_vetado(capsys):
+    """El subcomando quitar no existe más (OMC suma, no quita)."""
+    from omc import addons_cli as _ac
+    from omc import flows as _f
+    assert _ac.main(["quitar", "algun_modulo"]) == 2
+    assert not hasattr(_f, "run_quitar")
+    capsys.readouterr()
+
+
+def test_addons_bundle_acepta_retry():
+    from omc.addons_cli import _parse
+    sub, ns, pos = _parse(["bundle", "--retry"])
+    assert sub == "bundle" and ns.retry is True
+    sub, ns, pos = _parse(["bundle"])
+    assert ns.retry is False
+
+
+def test_bundle_sin_modulos_avisa_y_queda_pendiente(tmp_path, capsys):
+    """Entrada sin módulos: aviso (nunca skip silencioso) + pendiente guardado."""
+    import json as _json
+    from types import SimpleNamespace
+    import omc.flows as F
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "config").mkdir(parents=True)
+    (p / "addons" / "repos.json").write_text("[]", encoding="utf-8")
+    (p / "b.json").write_text(_json.dumps({
+        "modulos": [{"org": "oca", "repo": "web",
+                     "url": "https://github.com/oca/web", "modules": []}]}),
+        encoding="utf-8")
+    F.run_bundle(SimpleNamespace(proyecto=str(p), archivo="b.json", branch="17.0",
+                                 odoo="", retry=False))
+    out = capsys.readouterr().out
+    assert "sin módulos en el bundle" in out
+    pend = _json.loads((p / "addons" / ".bundle-pendientes.json").read_text(encoding="utf-8"))
+    assert len(pend) == 1 and pend[0]["repo"] == "web"
+
+
+def test_bundle_retry_sin_pendientes(tmp_path, capsys):
+    from types import SimpleNamespace
+    import omc.flows as F
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "config").mkdir(parents=True)
+    (p / "addons" / "repos.json").write_text("[]", encoding="utf-8")
+    (p / "b.json").write_text('{"modulos": []}', encoding="utf-8")
+    F.run_bundle(SimpleNamespace(proyecto=str(p), archivo="b.json", branch="17.0",
+                                 odoo="", retry=True))
+    assert "Sin pendientes" in capsys.readouterr().out
+    assert not (p / "addons" / ".bundle-pendientes.json").exists()
+
+
+def test_bundle_ok_limpia_pendientes(tmp_path, capsys):
+    import json as _json
+    import subprocess as _sp
+    import os as _os
+    from types import SimpleNamespace
+    import omc.flows as F
+    rem = tmp_path / "remoto" / "queue"
+    mod = rem / "queue_job"
+    mod.mkdir(parents=True)
+    (mod / "__manifest__.py").write_text("{'name': 'x'}", encoding="utf-8")
+    e = dict(_os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+             GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+    _sp.run(["git", "init", "-qb", "17.0"], cwd=str(rem), env=e, check=True)
+    _sp.run(["git", "add", "."], cwd=str(rem), env=e, check=True)
+    _sp.run(["git", "commit", "-qm", "ini"], cwd=str(rem), env=e, check=True)
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "config").mkdir(parents=True)
+    (p / ".env").write_text("ODOO_VERSION=17\n", encoding="utf-8")
+    (p / "config" / "odoo.conf").write_text("[options]\nworkers = 2\n", encoding="utf-8")
+    (p / "b.json").write_text(_json.dumps({
+        "modulos": [{"org": "oca", "repo": "queue", "url": str(rem),
+                     "modules": ["queue_job"]}]}), encoding="utf-8")
+    (p / "addons" / ".bundle-pendientes.json").write_text(
+        _json.dumps([{"repo": "viejo", "motivo": "x"}]), encoding="utf-8")
+    F.run_bundle(SimpleNamespace(proyecto=str(p), archivo="b.json", branch="17.0",
+                                 odoo="", retry=False))
+    out = capsys.readouterr().out
+    assert "Todo lo registrado está en disco" in out
+    assert not (p / "addons" / ".bundle-pendientes.json").exists()
+
+
+def _proj_stale(tmp_path):
+    import json as _json
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text(_json.dumps([
+        {"org": "oca", "repo": "server-tools", "url": "https://x/y",
+         "branch": "18.0", "path": "addons/oca/server-tools",
+         "modules": ["auditlog", "desaparecido"]},
+    ]), encoding="utf-8")
+    (p / "addons" / "oca" / "server-tools" / "auditlog").mkdir(parents=True)
+    return p
+
+
+def test_faltantes_disco_unit(tmp_path):
+    from omc.flows import faltantes_disco
+    assert faltantes_disco(_proj_stale(tmp_path)) == ["server-tools/desaparecido"]
+    (tmp_path / "proj" / "addons" / "oca" / "server-tools" / "desaparecido").mkdir()
+    assert faltantes_disco(tmp_path / "proj") == []
+
+
+def test_run_sync_stale_frena_antes_del_rebuild(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    import omc.flows as F
+    from types import SimpleNamespace
+    p = _proj_stale(tmp_path)
+    monkeypatch.setattr(F, "run_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_check_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_deps_simple", lambda *a, **k: None)
+    monkeypatch.setattr(F, "actualizar_bundle_desde_estado", lambda *a, **k: False)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(F, "ask_si_no", lambda *a, **k: False)
+    vistos = []
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: vistos.append(a[0]))
+    run_sync(SimpleNamespace(proyecto=str(p), bundle="", odoo="", branch="",
+                             yes=False, skip_install=True, no_deploy=False))
+    out = capsys.readouterr().out
+    assert "Módulos registrados pero no descargados" in out
+    assert "Re-descargalos" in out  # mensaje del gate (el prompt lo imprime ask real)
+    assert vistos == []
+
+
+def test_run_sync_stale_sigue_con_si(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    import omc.flows as F
+    from types import SimpleNamespace
+    p = _proj_stale(tmp_path)
+    monkeypatch.setattr(F, "run_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_check_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_deps_simple", lambda *a, **k: None)
+    monkeypatch.setattr(F, "actualizar_bundle_desde_estado", lambda *a, **k: False)
+    monkeypatch.setattr(F, "asegurar_queue_job_conf", lambda *a, **k: False)
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(F, "ask_si_no", lambda *a, **k: True)
+    vistos = []
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: vistos.append(a[0]) or SimpleNamespace(returncode=0))
+    run_sync(SimpleNamespace(proyecto=str(p), bundle="", odoo="", branch="",
+                             yes=False, skip_install=True, no_deploy=False))
+    out = capsys.readouterr().out
+    assert "Odoo reiniciado" in out
+    assert any("restart" in " ".join(map(str, c)) for c in vistos)
+
+
+def test_arbol_sucio(tmp_path):
+    import subprocess as _sp
+    from omc.gitutils import arbol_sucio
+    plano = tmp_path / "plano"
+    plano.mkdir()
+    assert arbol_sucio(plano) is False
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    e = {"GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t",
+         "GIT_COMMITTER_NAME": "t", "GIT_COMMITTER_EMAIL": "t@t"}
+    import os as _os
+    env = dict(_os.environ, **e)
+    _sp.run(["git", "init", "-qb", "main"], cwd=str(repo), env=env, check=True)
+    (repo / "f.txt").write_text("x", encoding="utf-8")
+    _sp.run(["git", "add", "."], cwd=str(repo), env=env, check=True)
+    _sp.run(["git", "commit", "-qm", "ini"], cwd=str(repo), env=env, check=True)
+    assert arbol_sucio(repo) is False
+    (repo / "nuevo.txt").write_text("y", encoding="utf-8")
+    assert arbol_sucio(repo) is True
+
+
+def test_add_omite_arbol_sucio(monkeypatch, tmp_path, capsys):
+    import json as _json
+    import subprocess as _sp
+    import os as _os
+    from omc.addonsops import add_modules
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("omc.addonsops.ask_si_no", lambda *a, **k: False)
+    p = tmp_path / "proj"
+    dest = p / "addons" / "oca" / "web"
+    dest.mkdir(parents=True)
+    env = dict(_os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+               GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+    _sp.run(["git", "init", "-qb", "17.0"], cwd=str(dest), env=env, check=True)
+    (dest / "web_responsive").mkdir()
+    (dest / "web_responsive" / "__manifest__.py").write_text("{}", encoding="utf-8")
+    (dest / "sucio.txt").write_text("local", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text(_json.dumps([
+        {"org": "oca", "repo": "web", "url": "https://github.com/oca/web",
+         "branch": "17.0", "path": "addons/oca/web", "modules": ["web_responsive"]},
+    ]), encoding="utf-8")
+    ok, fail = add_modules(p, "oca", "web", "https://github.com/oca/web", "17.0",
+                           ["otro_mod"])
+    assert ok == [] and fail == ["otro_mod"]
+    out = capsys.readouterr().out
+    assert "árbol sucio" in out
+    repos = _json.loads((p / "addons" / "repos.json").read_text(encoding="utf-8"))
+    assert repos[0]["modules"] == ["web_responsive"]
+
+
+def test_run_deps_omite_repo_sucio(monkeypatch, tmp_path, capsys):
+    from types import SimpleNamespace
+    import omc.flows as F
+    p = tmp_path / "proj"
+    base = p / "addons" / "oca" / "web"
+    (base / "a").mkdir(parents=True)
+    (base / "b").mkdir()
+    (base / "c").mkdir()
+    for m in ("a", "b", "c"):
+        (base / m / "__manifest__.py").write_text("{}", encoding="utf-8")
+    (base / "c" / "__manifest__.py").write_text(
+        "{'depends': ['b']}", encoding="utf-8")
+    import json as _json
+    (p / "addons" / "repos.json").write_text(_json.dumps([
+        {"org": "oca", "repo": "web", "url": "https://x/y", "branch": "17.0",
+         "path": "addons/oca/web", "modules": ["a", "c"]},
+    ]), encoding="utf-8")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(F, "arbol_sucio", lambda *a, **k: True)
+    monkeypatch.setattr(F, "ask_si_no", lambda *a, **k: False)
+    monkeypatch.setattr("omc.tui.checklist", lambda *a, **k: None)
+    F.run_deps(SimpleNamespace(proyecto=str(p), fix=True, porcelain=False,
+                               enfocar="", branch="17.0", odoo=""))
+    out = capsys.readouterr().out
+    assert "árbol sucio" in out
+    assert "Sin avances" in out
+
+
+def _fake_psql(monkeypatch, por_sql):
+    import subprocess as _sp
+
+    class _R:
+        def __init__(self, out, rc=0):
+            self.stdout = out
+            self.returncode = rc
+            self.stderr = ""
+
+    def _run(cmd, **k):
+        txt = " ".join(map(str, cmd if isinstance(cmd, list) else [cmd]))
+        for clave, out in por_sql.items():
+            if clave in txt:
+                return _R(out)
+        return _R("", 1)
+    monkeypatch.setattr(_sp, "run", _run)
+
+
+def test_bd_disco_sin_contenedores_devuelve_none(monkeypatch, tmp_path, capsys):
+    from omc.flows import inconsistencias_bd_disco
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+
+    def _boom(*a, **k):
+        raise FileNotFoundError()
+    import subprocess as _s2
+    monkeypatch.setattr(_s2, "run", _boom)
+    assert inconsistencias_bd_disco(p) is None
+    capsys.readouterr()
+
+
+def test_bd_disco_detecta_fantasma(monkeypatch, tmp_path, capsys):
+    import json as _json
+    from omc.flows import inconsistencias_bd_disco
+    p = tmp_path / "proj"
+    (p / "addons" / "oca" / "web").mkdir(parents=True)
+    (p / "addons" / "oca" / "web" / "web_responsive").mkdir()
+    (p / "addons" / "oca" / "web" / "web_responsive" / "__manifest__.py").write_text(
+        "{}", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text(_json.dumps([
+        {"org": "oca", "repo": "web", "url": "https://x/y", "branch": "18.0",
+         "path": "addons/oca/web", "modules": ["web_responsive"]},
+    ]), encoding="utf-8")
+    _fake_psql(monkeypatch, {
+        "SELECT datname": "prod\n",
+        "ir_module_module": "base\nweb_responsive\nfantasma_mod\n",
+        "ls -d": "/usr/lib/python3/dist-packages/odoo/addons/base/\n",
+    })
+    malas = inconsistencias_bd_disco(p)
+    assert ("prod", "fantasma_mod") in malas
+    assert ("prod", "web_responsive") not in malas
+    capsys.readouterr()
+
+
+def test_run_sync_bd_gate_frena(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    import omc.flows as F
+    from types import SimpleNamespace
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text("[]", encoding="utf-8")
+    monkeypatch.setattr(F, "run_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_check_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_deps_simple", lambda *a, **k: None)
+    monkeypatch.setattr(F, "actualizar_bundle_desde_estado", lambda *a, **k: False)
+    monkeypatch.setattr(F, "inconsistencias_bd_disco",
+                        lambda *a, **k: [("prod", "fantasma_mod")])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(F, "ask_si_no", lambda *a, **k: False)
+    vistos = []
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: vistos.append(a[0]))
+    run_sync(SimpleNamespace(proyecto=str(p), bundle="", odoo="", branch="",
+                             yes=False, skip_install=True, no_deploy=False))
+    out = capsys.readouterr().out
+    assert "sin manifest visible" in out
+    assert vistos == []
+
+
+def test_load_repos_corrupto_aborta(tmp_path):
+    import pytest
+    from omc.manifest import load_repos
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "addons" / "repos.json").write_text("{invalido", encoding="utf-8")
+    with pytest.raises(ValueError, match="corrupto"):
+        load_repos(p)
+
+
+def test_load_repos_ausente_sigue_vacio(tmp_path):
+    from omc.manifest import load_repos
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    assert load_repos(p) == []
+
+
+def test_project_repos_corrupto_aborta(tmp_path):
+    import pytest
+    from omc.core import Project
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text("[1,", encoding="utf-8")
+    with pytest.raises(ValueError, match="corrupto"):
+        Project(p).repos()
