@@ -104,12 +104,13 @@
 - **Convención en inglés**: carpeta ejemplo `~/omc-projects` en mensaje visible + docs.
 - **Docs: instalar OMC en WSL2**: nuevo `Manual §15.2` (docker-ce oficial, clone en `~` con `autocrlf false`, convención `/opt` como en VPS con sudo único, recursos solo mencionados, `ODOO_ADMIN_PASSWORD` preventivo, verificación con `which`, proyecto `prueba` + limpieza con `down -v`, y gotchas); resumen en `README ## Instalación` + perfiles de entorno en `AGENTS.md`; se elimina `Guia-WSL.md` plegada al Manual.
 
-## [Sin publicar]
+## [1.5.0] - 2026-10-10
 
 - **Fix crítico: pull filtrado truncaba `repos.json`**: `omc addons pull <repo>` guardaba solo la entrada filtrada, borrando las demás (causa raíz del incidente Sep-Oct 2026: siguiente regen escribía `addons_path` con un solo repo → 500 masivo). Ahora guarda siempre la lista completa + test de regresión.
 - **Pull con menú de aplicación**: tras el pull analiza el diff (`git diff SHA viejo..nuevo`) y clasifica por archivo (modelos/vistas/datos/assets→`-u`, solo-Python→restart, requirements→sync, docs/tests→nada); sin cambios no sugiere nada; menú de una confirmación (aplicar sugerido por default, restart, update multi en un comando + restart, rebuild, sync completo, nada); en prod ofrece backup antes del `-u`; sin tty solo informa. Vive en el menú 2 (tras descargar, antes de deps, default no) y en `omc addons pull [--db BD]` directo. Cada mutación git deja su línea (`repo: viejo..nuevo (N commits)`).
-
 - **Docs: aplicar cambios post-pull**: `Manual §5.8` ahora explica que el `-u` va con `omc update` (contenedor efímero; con `exec` sale `Address already in use`), cuándo basta `restart`, la receta dev-primero (`backup → restore --neutralizar → omc test → omc update prod`) y que `addons pull <repo>` filtra por el campo `repo` de `repos.json` (no la URL).
+
+## [Sin publicar]
 
 ## [1.0.0]
 
