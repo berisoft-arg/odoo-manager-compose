@@ -5,7 +5,7 @@ Uso:
   omc addons add --repo server-tools [--org oca] [--odoo 18] mod1 mod2 [...]
   omc addons bundle [--proyecto P] [--archivo F] [--odoo 18] [--retry]
   omc addons export-bundle [--proyecto P] [--salida F] [--force]
-  omc addons pull [--proyecto P] [repo]
+  omc addons pull [--proyecto P] [--db BD] [repo]
   omc addons status [--proyecto P]
   omc addons fix-paths [--proyecto P]
   omc addons instalar [--proyecto P] [--odoo 18]
@@ -26,7 +26,7 @@ _SUBS = (
 
 _FLAGS_VALOR = {
     "--proyecto", "-p", "--odoo", "--branch", "--org", "--repo", "--url",
-    "--bundle", "--archivo", "--salida", "--desc", "--rclone-remote",
+    "--bundle", "--archivo", "--salida", "--desc", "--rclone-remote", "--db",
 }
 _FLAGS_BOOL = {"--yes", "--skip-install", "--no-deploy", "--force", "--fix", "--retry"}
 
@@ -66,6 +66,7 @@ def _parse(argv):
         archivo=vals.get("archivo"),
         salida=vals.get("salida"),
         desc=vals.get("desc", ""),
+        db=vals.get("db"),
         modulos=[],
         yes=bool(vals.get("yes")),
         skip_install=bool(vals.get("skip_install")),

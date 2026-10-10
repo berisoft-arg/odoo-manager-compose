@@ -61,6 +61,7 @@ from .core import (
     snapshot_proyecto,
     historial_iniciar,
     historial_cerrar,
+    historial_linea,
 )
 from .compose import (
     generar_compose,
@@ -89,6 +90,8 @@ from .gitutils import (
     remote_head,
     run,
     arbol_sucio,
+    info_pull,
+    linea_pull,
 )
 from .manifest import (
     leer_manifest,
@@ -2165,6 +2168,38 @@ def run_sync(args):
         else:
             historial_cerrar()
             return  # no hay nada nuevo: vuelve al menú sin mostrar deps ni aplicar
+    # Pull de repos instalados (opt-in): trae actualizaciones ANTES de analizar
+    # deps, para un solo ciclo de aplicación. Default no; sin tty se saltea.
+    if (not getattr(args, "sin_pull", False) and sys.stdin.isatty()
+            and not args.yes):
+        try:
+            _todos_pull = load_repos(proyecto)
+        except ValueError:
+            _todos_pull = []
+        _candidatos = [r for r in _todos_pull
+                       if r.get("url") and r.get("branch") and r.get("repo")
+                       and (proyecto / (r.get("path") or "")).is_dir()]
+        if _candidatos and ask_si_no("¿Hacer git pull de repos instalados?",
+                                     default_no=True):
+            from .tui import checklist as _cl_pull
+            try:
+                _items = [f"{r['repo']}  [{r['path']}]" for r in _candidatos]
+                _sel = _cl_pull("Repos para git pull", ["todos"] + _items)
+            except Exception:  # noqa: BLE001
+                _sel = None
+            if _sel:
+                _elegidos = (_candidatos if "todos" in _sel else
+                             [r for r in _candidatos
+                              if f"{r['repo']}  [{r['path']}]" in _sel])
+                _cambios_pull = []
+                for _r in _elegidos:
+                    _c = pull_repo_con_plan(proyecto, _r)
+                    if _c:
+                        _cambios_pull.append(_c)
+                from .manifest import save_repos as _save_pull
+                _save_pull(proyecto, _todos_pull)
+                menu_aplicar_pull(proyecto, _cambios_pull,
+                                  db=getattr(args, "db", None))
     # Auto-export: fusiona el estado actual en addons-bundle.json (lo crea si
     # falta) para clonar esta instancia después. Suma sin borrar entradas manuales.
     if actualizar_bundle_desde_estado(proyecto):
@@ -2495,29 +2530,228 @@ def run_bundle(args):
     historial_cerrar()
 
 
+def pull_repo_con_plan(proyecto, r):
+    """Pull de un repo + diff SHA viejo->nuevo. No aplica nada.
+
+    Devuelve dict {repo, path, branch, viejo, nuevo, cambiado, archivos}
+    o None si el clon no existe (omitido).
+    """
+    from .manifest import anotar_sha
+    proyecto = Path(proyecto)
+    p = proyecto / (r.get("path") or "")
+    if not r.get("path") or not p.is_dir():
+        print(f"  ⚠ {r.get('path') or r.get('repo')}: no existe, omitido.")
+        return None
+    viejo = r.get("sha") or ""
+    print(f"Pull {r['path']} ({r.get('branch')}) ...")
+    git_pull(str(p))
+    anotar_sha(r, p)
+    nuevo7, n = info_pull(str(p), viejo)
+    linea = linea_pull(r.get("repo") or r.get("path") or "?", viejo, nuevo7, n)
+    print(f"  {linea}")
+    historial_linea(f"PULL {linea}")
+    nuevo = r.get("sha") or ""
+    archivos = []
+    if viejo and nuevo and viejo != nuevo:
+        try:
+            d = subprocess.run(
+                ["git", "-C", str(p), "diff", "--name-only", viejo, nuevo],
+                text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                timeout=60)
+            if d.returncode == 0:
+                archivos = [x.strip().replace("\\", "/") for x in (d.stdout or "").splitlines()
+                            if x.strip()]
+        except Exception:  # noqa: BLE001
+            archivos = []
+    return {"repo": r.get("repo"), "path": r.get("path"), "branch": r.get("branch"),
+            "viejo": viejo[:7], "nuevo": nuevo[:7], "cambiado": viejo != nuevo,
+            "archivos": archivos}
+
+
+_PESO_NIVEL = {"nada": 0, "restart": 1, "update": 2, "sync": 3}
+
+
+def _max_nivel(a, b):
+    return a if _PESO_NIVEL.get(a, 0) >= _PESO_NIVEL.get(b, 0) else b
+
+
+def clasificar_cambios_pull(archivos):
+    """(nivel_global, {modulo: nivel}) según paths del diff. Puro, sin I/O.
+
+    Niveles: nada < restart < update < sync.
+    """
+    por_mod = {}
+    for f in archivos or []:
+        partes = [x for x in str(f).replace("\\", "/").split("/") if x not in ("", ".")]
+        if not partes:
+            continue
+        bajo = [x.lower() for x in partes]
+        nombre = bajo[-1]
+        ext = nombre.rsplit(".", 1)[-1] if "." in nombre else ""
+        if ".github" in bajo:
+            nivel, mod = "nada", (partes[0] if len(partes) > 1 else None)
+        elif len(partes) == 1:
+            mod = None
+            if nombre.startswith("requirements") or nombre in (
+                    "dockerfile", "setup.py", "setup.cfg", "pyproject.toml") or \
+                    nombre.startswith("dockerfile") or ext == "cfg":
+                nivel = "sync"
+            elif ext in ("md", "rst", "txt", "yml", "yaml", "toml", "in",
+                         "gitignore", "dockerignore") or nombre.startswith("."):
+                nivel = "nada"
+            else:
+                nivel = "restart"
+        else:
+            mod = partes[0]
+            resto = bajo[1:]
+            if mod in ("tests", "test", "docs", "doc", ".github"):
+                mod, nivel = None, "nada"
+            elif resto[0] in ("tests", "test", "docs", "doc") or nombre.startswith("."):
+                nivel = "nada"
+            elif ext in ("md", "rst", "txt", "png", "jpg", "jpeg", "svg", "gif",
+                         "ico") and not nombre.startswith("requirements"):
+                nivel = "nada"
+            elif nombre.startswith("requirements") or nombre in (
+                    "dockerfile", "setup.py", "setup.cfg", "pyproject.toml") or \
+                    nombre.startswith("dockerfile") or ext == "cfg":
+                nivel = "sync"
+            elif resto[0] in ("models", "controllers") or \
+                    nombre in ("__manifest__.py", "__openerp__.py") or \
+                    (len(resto) > 1 and resto[0] in ("views", "data", "security", "i18n",
+                                                     "wizards", "report", "reports", "static",
+                                                     "templates")):
+                nivel = "update"
+            elif ext in ("xml", "csv", "po", "pot", "js", "scss", "css", "less",
+                         "yaml", "yml", "json"):
+                nivel = "update"
+            elif ext == "py":
+                nivel = "restart"
+            else:
+                nivel = "restart"
+        if mod and nivel != "nada":
+            por_mod[mod] = _max_nivel(por_mod.get(mod, "nada"), nivel)
+        elif not mod and nivel != "nada":
+            por_mod.setdefault("", nivel)
+            por_mod[""] = _max_nivel(por_mod[""], nivel)
+    global_ = "nada"
+    for v in por_mod.values():
+        global_ = _max_nivel(global_, v)
+    por_mod.pop("", None)
+    return global_, por_mod
+
+
+def menu_aplicar_pull(proyecto, cambios, db=None):
+    """Menú post-pull según diff. Sin tty: solo informa. Devuelve la acción o ""."""
+    from types import SimpleNamespace
+    proyecto = Path(proyecto)
+    con_cambios = [c for c in (cambios or []) if c and c.get("cambiado")]
+    if not con_cambios:
+        print("Sin cambios: nada que aplicar.")
+        return ""
+    niveles = {}
+    mods_update = set()
+    for c in con_cambios:
+        nivel, por_mod = clasificar_cambios_pull(c.get("archivos"))
+        c["nivel"] = nivel
+        niveles[c.get("repo")] = (c.get("viejo"), c.get("nuevo"), nivel,
+                                  len(c.get("archivos") or []))
+        if nivel == "update":
+            mods_update.update(por_mod.keys())
+    print("== Cambios del pull ==")
+    for repo, (viejo, nuevo, nivel, n) in sorted(niveles.items()):
+        print(f"  {repo}: {viejo}..{nuevo} ({n} archivos) → {nivel}")
+        _, por_mod = clasificar_cambios_pull(
+            [f for c in con_cambios if c.get("repo") == repo
+             for f in (c.get("archivos") or [])])
+        for mod, nv in sorted(por_mod.items()):
+            print(f"    {mod}: {nv}")
+    global_ = "nada"
+    for _, _, nivel, _ in niveles.values():
+        global_ = _max_nivel(global_, nivel)
+    if global_ == "nada":
+        print("Solo docs/tests: nada que aplicar.")
+        return ""
+    mods_update = sorted(mods_update)
+    if global_ == "sync":
+        sug, sug_txt = "sync", "sync completo"
+    elif global_ == "update":
+        sug, sug_txt = "update", f"update {','.join(mods_update)} + restart"
+    else:
+        sug, sug_txt = "restart", "restart odoo"
+    if not sys.stdin.isatty():
+        print(f"Sugerido: {sug_txt} (sin tty: no se aplica solo).")
+        return ""
+    candidatas = [("restart", "restart odoo"),
+                  ("update", f"update {','.join(mods_update)} + restart"
+                   if mods_update else "update"),
+                  ("rebuild", "rebuild (up --build)"),
+                  ("sync", "sync completo")]
+    opciones = [f"Aplicar sugerido: {sug_txt}"]
+    opciones += [txt for nombre, txt in candidatas if nombre != sug]
+    opciones.append("Nada")
+    elegida = ask_opcion("¿Cómo aplicamos lo traído?", opciones, opciones[0])
+    if elegida == "Nada":
+        print("Sin aplicar (el código nuevo queda en disco).")
+        return ""
+    accion = sug
+    if elegida != opciones[0]:
+        for nombre, txt in candidatas:
+            if elegida == txt:
+                accion = nombre
+                break
+    historial_linea(f"pull-apply {accion} (sugerido era {sug})")
+    if accion == "restart":
+        r = subprocess.run(["docker", "compose", "restart", "odoo"], cwd=str(proyecto))
+        print("✓ Odoo reiniciado." if r.returncode == 0 else "⚠ Falló el restart.")
+        return "restart"
+    if accion == "update":
+        if not mods_update:
+            print("  (sin módulos para -u: solo restart)")
+            r = subprocess.run(["docker", "compose", "restart", "odoo"], cwd=str(proyecto))
+            return "restart"
+        bd = _elegir_bd(proyecto, db, f"actualizar {','.join(mods_update)}")
+        if es_prod(proyecto) and ask_si_no("Backup antes del update? (recomendado en prod)",
+                                           default_no=False):
+            run_backup(SimpleNamespace(proyecto=str(proyecto), db=bd))
+        r = subprocess.run(["docker", "compose", "run", "--rm", "odoo",
+                            "odoo", "-d", bd, "-u", ",".join(mods_update),
+                            "--stop-after-init"], cwd=str(proyecto))
+        if r.returncode != 0:
+            print("⚠ Falló el update (revisá el log de arriba).")
+            return "update-fallo"
+        r2 = subprocess.run(["docker", "compose", "restart", "odoo"], cwd=str(proyecto))
+        print("✓ Actualizado + reiniciado." if r2.returncode == 0 else "✓ Actualizado (revisá el restart).")
+        return "update"
+    if accion == "rebuild":
+        r = subprocess.run(["docker", "compose", "up", "-d", "--build"], cwd=str(proyecto))
+        print("✓ Rebuild aplicado." if r.returncode == 0 else "⚠ Falló el rebuild.")
+        return "rebuild"
+    # sync completo (hereda snapshot + guards; sin re-ofrecer pull)
+    run_sync(SimpleNamespace(bundle="", branch="", odoo="", yes=False, no_deploy=False,
+                             skip_install=True, proyecto=str(proyecto), sin_pull=True))
+    return "sync"
+
+
 def run_pull(args):
     proyecto = find_proyecto(args.proyecto)
-    repos = load_repos(proyecto)
+    todos = load_repos(proyecto)
     historial_iniciar(proyecto, "pull")
     snapshot_proyecto(proyecto, archivos=("addons/repos.json",), motivo="pull")
-    if args.repo:
-        repos = [r for r in repos if r["repo"] == args.repo]
-    if not repos:
+    filtro = getattr(args, "repo", None)
+    elegidos = [r for r in todos if r["repo"] == filtro] if filtro else list(todos)
+    if not elegidos:
         print("Nada para actualizar (repos.json vacío).")
         historial_cerrar()
         return
-    for r in repos:
-        p = proyecto / r["path"]
-        if not p.is_dir():
-            print(f"  ⚠ {r['path']}: no existe, omitido.")
-            continue
-        print(f"Pull {r['path']} ({r['branch']}) ...")
-        git_pull(str(p))
-        from .manifest import anotar_sha
-        anotar_sha(r, p)
-    from .manifest import save_repos
-    save_repos(proyecto, repos)
-    print("Listo. Reinicia: docker compose restart odoo")
+    cambios = []
+    for r in elegidos:
+        c = pull_repo_con_plan(proyecto, r)
+        if c:
+            cambios.append(c)
+    # OJO: se guarda la lista COMPLETA (el filtro es solo para iterar).
+    # Guardar el subconjunto borraba las demás entradas (bug histórico).
+    save_repos(proyecto, todos)
+    menu_aplicar_pull(proyecto, cambios, db=getattr(args, "db", None))
     historial_cerrar()
 
 

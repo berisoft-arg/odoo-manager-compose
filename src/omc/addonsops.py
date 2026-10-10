@@ -5,9 +5,9 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .core import load_catalog, leer_env
+from .core import load_catalog, leer_env, historial_linea
 from .github import git_auth_args, org_desde_url, org_subdir, resolve_repo
-from .gitutils import git_clone, run, arbol_sucio
+from .gitutils import git_clone, run, arbol_sucio, git_sha, info_pull, linea_pull
 from .tui import ask_si_no
 from .manifest import (
     indice_modulos_disco, iterar_modulos, leer_manifest,
@@ -155,6 +155,7 @@ def add_modules(proyecto: Path, org: str, repo: str, url: str, branch: str, modu
     elif nuevos or todo_repo:
         # El clon puede estar viejo (el listado siempre es fresco): si el remoto
         # avanzó, el checkout viejo no materializa módulos nuevos aunque listen bien.
+        _viejo = git_sha(str(dest)) or ""
         pf = subprocess.run(["git"] + git_auth_args(url) + ["pull", "--ff-only"],
                             cwd=str(dest), text=True, stdout=subprocess.DEVNULL,
                             stderr=subprocess.PIPE, timeout=180)
@@ -162,6 +163,11 @@ def add_modules(proyecto: Path, org: str, repo: str, url: str, branch: str, modu
             ultima = (pf.stderr or "").strip().splitlines()
             motivo = ultima[-1][:120] if ultima else "sin detalle"
             print(f"  Aviso: no pude actualizar el clon ({motivo}). Sigo con lo que hay en disco.")
+        else:
+            _nuevo7, _n = info_pull(str(dest), _viejo)
+            _linea = linea_pull(repo, _viejo, _nuevo7, _n)
+            print(f"  {_linea}")
+            historial_linea(f"PULL {_linea}")
     # Repo de UN SOLO módulo (manifest en raíz, ej onlyone-odoo/dolares_arg):
     # va entero en custom/ ANTES de validar nombres (sus subdirs no son módulos).
     if (dest / "__manifest__.py").exists() or (dest / "__openerp__.py").exists():

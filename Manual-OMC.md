@@ -298,11 +298,30 @@ cd /opt/mi-proyecto
 omc addons pull                  # todos los clones (git pull --ff-only)
 omc addons pull odoo-paintstore  # uno solo (nombre exacto del campo `repo` de addons/repos.json,
                                  # NO la URL; la rama se toma de la entrada)
+omc addons pull --db <bd> odoo-paintstore  # deja la BD lista para el -u del menú
 ```
 
 Hace `git pull --ff-only` en cada clon y anota el `SHA` nuevo en `addons/repos.json`
 (verificable con `omc addons status` y con `git -C addons/... rev-parse HEAD`).
-Si tocaste código dentro del clon, **no** mezcla: avisa y lo deja (commiteá/pusheá primero).
+El pull filtrado **guarda la lista completa** (el filtro elige qué traer, nunca
+qué guardar). Si tocaste código dentro del clon, **no** mezcla: avisa y lo deja
+(commiteá/pusheá primero).
+
+**El pull analiza el diff y propone cómo aplicarlo** (también desde el menú 2,
+que lo ofrece tras descargar y antes de deps). Clasificación por archivo:
+
+| Cambio | Acción sugerida |
+|---|---|
+| `models/`, `controllers/`, `__manifest__`, `views/`, `data/`, `security/`, `i18n/`, `wizards/`, `report*/`, `static/`, `templates/`, `*.xml/csv/po/js/scss` | `-u` del módulo |
+| otro `*.py` | `restart odoo` |
+| `requirements*`, `Dockerfile*`, `setup.py`, `pyproject.toml` en raíz | `sync` completo |
+| `tests/`, docs, `*.md`, `.github/` | nada |
+
+Sin cambios dice "nada que aplicar" (ya no sugiere reiniciar de más). El menú
+ofrece: aplicar sugerido (default, un Enter), restart, update, rebuild, sync,
+nada. El `update` es **un comando** efímero con todos los módulos
+(`-u m1,m2 --stop-after-init`) + restart después; en prod ofrece backup antes.
+Sin tty solo informa, no aplica.
 
 - Privados por `https`: necesitan `GITHUB_TOKEN` (por env, o menú 7 que lo guarda en
   `~/.config/omc/config.json` 0600, jamás en el proyecto); por `SSH` vale tu key, sin token.
@@ -402,6 +421,10 @@ Notas:
   (`<datos>` = `OMC_HOME`, o `~/odoo-manager-compose`, o `/opt/omc`, o
   `~/.local/share/omc` como fallback; ver con `tail`). Incluye comando,
   respuestas a prompts y snapshots.
+- **Todo pull deja una línea** (`repo: viejo..nuevo (N commits)` o `(sin cambios)`):
+  `add`/`sync` actualizan solos los clones existentes (con o sin tty) y anotan
+  el SHA; lo hecho con `git` pelado afuera no deja rastro en ningún lado
+  (trabajá vía OMC, o commiteá + `pull` para que quede registrado).
 - **Guards antes del rebuild**: módulos registrados sin descargar piden confirmar;
   clon con cambios sin commitear avisa antes del `sparse-checkout`;
   instalados en BD sin manifest visible bloquean con alerta. `repos.json`
@@ -428,6 +451,10 @@ omc addons sync --yes / --no-deploy / --skip-install
 
 Ofrece el instalador del inicio (bundle o lista), reporte enfocado en lo nuevo,
 y UN menú aplicar-todo (Dockerfile si hace falta, rebuild si cambió algo, si no restart).
+Tras descargar y antes de deps, ofrece **git pull de repos instalados**
+(default no; selector con "todos"): trae actualizaciones para que deps las vea
+en el mismo ciclo, con el menú de aplicación del §5.8 (restart / `-u` multi /
+rebuild / sync / nada). Sin tty se saltea.
 Antes de aplicar, si `queue_job` (OCA) está descargado deja su config en `odoo.conf`
 (`server_wide_modules` con queue_job + `[queue_job] channels = root:2`, fusionando
 sin pisar; avisa si `workers = 0` porque el runner no arranca). Vale al instalar

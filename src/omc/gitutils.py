@@ -66,6 +66,29 @@ def arbol_sucio(repo_dir) -> bool:
         return False
 
 
+def info_pull(repo_dir, viejo: str):
+    """(sha7_nuevo, n_commits|None) tras un pull. Nunca falla."""
+    nuevo = git_sha(repo_dir) or ""
+    n = None
+    if viejo and nuevo and viejo != nuevo:
+        try:
+            r = subprocess.run(["git", "-C", str(repo_dir), "rev-list", "--count",
+                                f"{viejo}..{nuevo}"],
+                               text=True, stdout=subprocess.PIPE,
+                               stderr=subprocess.DEVNULL, timeout=30)
+            if r.returncode == 0 and (r.stdout or "").strip().isdigit():
+                n = (r.stdout or "").strip()
+        except Exception:  # noqa: BLE001
+            n = None
+    return (nuevo[:7] if nuevo else ""), n
+
+
+def linea_pull(repo: str, viejo: str, nuevo7: str, n_commits=None) -> str:
+    """Línea única de reporte: 'repo: a..b (N commits)' o '(sin cambios)'."""
+    base = f"{repo}: {viejo[:7] if viejo else '?'}..{nuevo7 or '?'}"
+    return base + (f" ({n_commits} commits)" if n_commits else " (sin cambios)")
+
+
 def git_clone(url: str, branch: str, dest: str, reintentos: int = 1):
     run(["git"] + git_auth_args(url) + ["clone", "--filter=blob:none", "--sparse",
          "--depth", "1", "-b", branch, url, dest], reintentos=reintentos)

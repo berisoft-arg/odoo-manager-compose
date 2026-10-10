@@ -3082,3 +3082,272 @@ def test_project_repos_corrupto_aborta(tmp_path):
     (p / "addons" / "repos.json").write_text("[1,", encoding="utf-8")
     with pytest.raises(ValueError, match="corrupto"):
         Project(p).repos()
+
+
+def _proj_pull(tmp_path, entries):
+    import json as _json
+    p = tmp_path / "proj"
+    (p / "addons").mkdir(parents=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text(_json.dumps(entries), encoding="utf-8")
+    return p
+
+
+def test_pull_repo_unico_no_trunca_json(monkeypatch, tmp_path, capsys):
+    """Regresión crítica: pull filtrado guarda la lista COMPLETA."""
+    import json as _json
+    from types import SimpleNamespace
+    import omc.flows as F
+    import omc.manifest as _M
+    p = _proj_pull(tmp_path, [
+        {"org": "oca", "repo": "r1", "url": "https://x/r1", "branch": "17.0",
+         "path": "addons/oca/r1", "modules": []},
+        {"org": "oca", "repo": "r2", "url": "https://x/r2", "branch": "17.0",
+         "path": "addons/oca/r2", "modules": []},
+    ])
+    (p / "addons" / "oca" / "r1").mkdir(parents=True)
+    vistos = []
+    monkeypatch.setattr(F, "git_pull", lambda d: vistos.append(d))
+    monkeypatch.setattr(_M, "anotar_sha", lambda r, d: r.update({"sha": "b" * 40}))
+    F.run_pull(SimpleNamespace(proyecto=str(p), repo="r1"))
+    repos = _json.loads((p / "addons" / "repos.json").read_text(encoding="utf-8"))
+    assert sorted(r["repo"] for r in repos) == ["r1", "r2"]
+    assert [r for r in repos if r["repo"] == "r1"][0]["sha"] == "b" * 40
+    assert vistos == [str(p / "addons" / "oca" / "r1")]
+    capsys.readouterr()
+
+
+def test_clasificar_cambios_pull():
+    from omc.flows import clasificar_cambios_pull
+    assert clasificar_cambios_pull([]) == ("nada", {})
+    assert clasificar_cambios_pull(["README.md", "tests/test_x.py", "mod/docs/a.rst"]) == ("nada", {})
+    nivel, mods = clasificar_cambios_pull(["mod1/x.py", "mod1/util.py"])
+    assert (nivel, mods) == ("restart", {"mod1": "restart"})
+    nivel, mods = clasificar_cambios_pull(["mod1/models/m.py", "mod1/x.py"])
+    assert (nivel, mods) == ("update", {"mod1": "update"})
+    nivel, mods = clasificar_cambios_pull(["mod1/views/v.xml", "mod2/y.py"])
+    assert nivel == "update" and mods == {"mod1": "update", "mod2": "restart"}
+    nivel, mods = clasificar_cambios_pull(["mod1/data/d.xml", "mod1/__manifest__.py"])
+    assert (nivel, mods) == ("update", {"mod1": "update"})
+    nivel, mods = clasificar_cambios_pull(["requirements.txt", "mod1/x.py"])
+    assert nivel == "sync"
+    nivel, mods = clasificar_cambios_pull(["mod1/static/src/x.js"])
+    assert (nivel, mods) == ("update", {"mod1": "update"})
+
+
+def test_pull_menu_sin_cambios_informa(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    import omc.flows as F
+    p = _proj_pull(tmp_path, [])
+    vistos = []
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: vistos.append(a[0]))
+    assert F.menu_aplicar_pull(p, []) == ""
+    assert F.menu_aplicar_pull(p, [{"repo": "r", "cambiado": False}]) == ""
+    assert "Sin cambios" in capsys.readouterr().out
+    assert vistos == []
+
+
+def test_pull_menu_tty_restart_por_default(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    import omc.flows as F
+    p = _proj_pull(tmp_path, [])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("omc.tui._leer", lambda *a, **k: "")
+    vistos = []
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: vistos.append(a[0]) or type("R", (), {"returncode": 0})())
+    cambios = [{"repo": "r1", "path": "addons/x/r1", "branch": "17.0",
+                "viejo": "a", "nuevo": "b", "cambiado": True,
+                "archivos": ["mod1/x.py"]}]
+    assert F.menu_aplicar_pull(p, cambios) == "restart"
+    assert any("restart" in " ".join(map(str, c)) for c in vistos)
+    assert "restart odoo" in capsys.readouterr().out
+
+
+def test_pull_menu_update_multi_un_comando(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    import omc.flows as F
+    p = _proj_pull(tmp_path, [])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("omc.tui._leer", lambda *a, **k: "")
+    monkeypatch.setattr(F, "_elegir_bd", lambda *a, **k: "midb")
+    vistos = []
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: vistos.append(a[0]) or type("R", (), {"returncode": 0})())
+    cambios = [{"repo": "r1", "path": "addons/x/r1", "branch": "17.0",
+                "viejo": "a", "nuevo": "b", "cambiado": True,
+                "archivos": ["modB/models/m.py", "modA/views/v.xml"]}]
+    assert F.menu_aplicar_pull(p, cambios) == "update"
+    ups = [c for c in vistos if "-u" in list(map(str, c))]
+    assert len(ups) == 1
+    assert "modA,modB" in " ".join(map(str, ups[0]))
+    capsys.readouterr()
+
+
+def test_pull_menu_sync_no_reofrece_pull(monkeypatch, tmp_path, capsys):
+    import omc.flows as F
+    p = _proj_pull(tmp_path, [])
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr("omc.tui._leer", lambda *a, **k: "1")
+    vistos = []
+    monkeypatch.setattr(F, "run_sync",
+                        lambda ns: vistos.append(getattr(ns, "sin_pull", None)))
+    cambios = [{"repo": "r1", "path": "addons/x/r1", "branch": "17.0",
+                "viejo": "a", "nuevo": "b", "cambiado": True,
+                "archivos": ["requirements.txt"]}]
+    assert F.menu_aplicar_pull(p, cambios) == "sync"
+    assert vistos == [True]
+    capsys.readouterr()
+
+
+def test_cli_pull_db_flag():
+    from omc.addons_cli import _parse
+    sub, ns, pos = _parse(["pull", "--db", "midb", "r1"])
+    assert (sub, ns.db) == ("pull", "midb")
+    assert pos == ["r1"]  # el repo posicional lo toma main(), no _parse
+    sub, ns, pos = _parse(["pull"])
+    assert ns.db is None
+
+
+def test_menu2_salta_pull_sin_tty(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    import omc.flows as F
+    from types import SimpleNamespace
+    p = _proj_pull(tmp_path, [
+        {"org": "oca", "repo": "r1", "url": "https://x/r1", "branch": "17.0",
+         "path": "addons/oca/r1", "modules": []},
+    ])
+    (p / "addons" / "oca" / "r1").mkdir(parents=True)
+    monkeypatch.setattr(F, "run_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_check_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_deps_simple", lambda *a, **k: None)
+    monkeypatch.setattr(F, "actualizar_bundle_desde_estado", lambda *a, **k: False)
+    monkeypatch.setattr(F, "asegurar_queue_job_conf", lambda *a, **k: False)
+    monkeypatch.setattr(F, "inconsistencias_bd_disco", lambda *a, **k: [])
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: type("R", (), {"returncode": 0})())
+    run_sync(SimpleNamespace(proyecto=str(p), bundle="", odoo="", branch="",
+                             yes=False, skip_install=True, no_deploy=False))
+    assert "¿Hacer git pull" not in capsys.readouterr().out
+
+
+def test_menu2_pull_guarda_lista_completa(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    import omc.flows as F
+    import omc.manifest as _M
+    from types import SimpleNamespace
+    p = _proj_pull(tmp_path, [
+        {"org": "oca", "repo": "r1", "url": "https://x/r1", "branch": "17.0",
+         "path": "addons/oca/r1", "modules": []},
+        {"org": "oca", "repo": "r2", "url": "https://x/r2", "branch": "17.0",
+         "path": "addons/oca/r2", "modules": []},
+    ])
+    (p / "addons" / "oca" / "r1").mkdir(parents=True)
+    (p / "addons" / "oca" / "r2").mkdir(parents=True)
+    monkeypatch.setattr(F, "run_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_check_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_deps_simple", lambda *a, **k: None)
+    monkeypatch.setattr(F, "actualizar_bundle_desde_estado", lambda *a, **k: False)
+    monkeypatch.setattr(F, "asegurar_queue_job_conf", lambda *a, **k: False)
+    monkeypatch.setattr(F, "inconsistencias_bd_disco", lambda *a, **k: [])
+    pulls = []
+    menus = []
+    monkeypatch.setattr(F, "pull_repo_con_plan",
+                        lambda proj, r: pulls.append(r["repo"]) or
+                        {"repo": r["repo"], "path": r["path"], "branch": r["branch"],
+                         "viejo": "a", "nuevo": "a", "cambiado": False, "archivos": []})
+    monkeypatch.setattr(F, "menu_aplicar_pull", lambda *a, **k: menus.append(a))
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(F, "ask_si_no", lambda *a, **k: True)
+    monkeypatch.setattr("omc.tui.checklist", lambda *a, **k: ["todos"])
+    guardadas = []
+    monkeypatch.setattr(_M, "save_repos",
+                        lambda proj, repos: guardadas.append(sorted(r["repo"] for r in repos)))
+    monkeypatch.setattr(_sp, "run", lambda *a, **k: type("R", (), {"returncode": 0})())
+    run_sync(SimpleNamespace(proyecto=str(p), bundle="", odoo="", branch="",
+                             yes=False, skip_install=True, no_deploy=False))
+    assert sorted(pulls) == ["r1", "r2"]
+    assert guardadas and guardadas[0] == ["r1", "r2"]
+    assert len(menus) == 1
+    capsys.readouterr()
+
+
+def _repo_dos_commits(tmp_path, nombre="r"):
+    import subprocess as _sp
+    import os as _os
+    rem = tmp_path / nombre
+    (rem / "modA").mkdir(parents=True)
+    (rem / "modA" / "__manifest__.py").write_text("{}", encoding="utf-8")
+    e = dict(_os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+             GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+    _sp.run(["git", "init", "-qb", "17.0"], cwd=str(rem), env=e, check=True)
+    _sp.run(["git", "add", "."], cwd=str(rem), env=e, check=True)
+    _sp.run(["git", "commit", "-qm", "uno"], cwd=str(rem), env=e, check=True)
+    sha1 = _sp.run(["git", "rev-parse", "HEAD"], cwd=str(rem), env=e, check=True,
+                   text=True, stdout=_sp.PIPE).stdout.strip()
+    (rem / "modA" / "otro.py").write_text("x=1\n", encoding="utf-8")
+    _sp.run(["git", "add", "."], cwd=str(rem), env=e, check=True)
+    _sp.run(["git", "commit", "-qm", "dos"], cwd=str(rem), env=e, check=True)
+    sha2 = _sp.run(["git", "rev-parse", "HEAD"], cwd=str(rem), env=e, check=True,
+                   text=True, stdout=_sp.PIPE).stdout.strip()
+    return rem, sha1, sha2, e
+
+
+def test_info_pull_y_linea(tmp_path):
+    from omc.gitutils import info_pull, linea_pull
+    rem, sha1, sha2, _e = _repo_dos_commits(tmp_path)
+    nuevo7, n = info_pull(str(rem), sha1)
+    assert (nuevo7, n) == (sha2[:7], "1")
+    assert info_pull(str(rem), sha2)[1] is None
+    assert info_pull(str(tmp_path), sha1) == ("", None)
+    assert linea_pull("r", sha1, sha2[:7], "1") == f"r: {sha1[:7]}..{sha2[:7]} (1 commits)"
+    assert linea_pull("r", sha2, sha2[:7], None).endswith("(sin cambios)")
+
+
+def test_pull_repo_con_plan_imprime_linea(monkeypatch, tmp_path, capsys):
+    import subprocess as _sp
+    import os as _os
+    import omc.flows as F
+    rem, sha1, sha2, _e = _repo_dos_commits(tmp_path)
+    p = tmp_path / "proj"
+    dest = p / "addons" / "oca" / "r"
+    dest.parent.mkdir(parents=True)
+    e = dict(_os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+             GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+    _sp.run(["git", "clone", "-q", str(rem), str(dest)], env=e, check=True)
+    r = {"org": "oca", "repo": "r", "url": str(rem), "branch": "17.0",
+         "path": "addons/oca/r", "modules": ["modA"], "sha": sha1}
+    monkeypatch.setattr(F, "git_pull", lambda d: None)
+    c = F.pull_repo_con_plan(p, r)
+    assert c["cambiado"] is True and c["viejo"] == sha1[:7]
+    assert r["sha"] == sha2
+    out = capsys.readouterr().out
+    assert f"r: {sha1[:7]}..{sha2[:7]} (1 commits)" in out
+
+
+def test_add_auto_pull_imprime_linea(tmp_path, capsys):
+    import json as _json
+    import subprocess as _sp
+    import os as _os
+    from omc.addonsops import add_modules
+    rem = tmp_path / "origin"
+    (rem / "modA").mkdir(parents=True)
+    (rem / "modA" / "__manifest__.py").write_text("{}", encoding="utf-8")
+    e = dict(_os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+             GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+    _sp.run(["git", "init", "-qb", "17.0"], cwd=str(rem), env=e, check=True)
+    _sp.run(["git", "add", "."], cwd=str(rem), env=e, check=True)
+    _sp.run(["git", "commit", "-qm", "uno"], cwd=str(rem), env=e, check=True)
+    p = tmp_path / "proj"
+    dest = p / "addons" / "oca" / "testrepo"
+    dest.parent.mkdir(parents=True)
+    _sp.run(["git", "clone", "-q", "--sparse", str(rem), str(dest)], env=e, check=True)
+    (rem / "LEEME.txt").write_text("nuevo\n", encoding="utf-8")
+    _sp.run(["git", "add", "."], cwd=str(rem), env=e, check=True)
+    _sp.run(["git", "commit", "-qm", "dos"], cwd=str(rem), env=e, check=True)
+    sha2 = _sp.run(["git", "rev-parse", "HEAD"], cwd=str(rem), env=e, check=True,
+                   text=True, stdout=_sp.PIPE).stdout.strip()
+    (p / "addons" / "repos.json").write_text("[]", encoding="utf-8")
+    ok, fail = add_modules(p, "oca", "testrepo", str(rem), "17.0", ["modA"])
+    assert ok == ["modA"] and fail == []
+    out = capsys.readouterr().out
+    assert "testrepo: " in out and ".." in out and "(1 commits)" in out
+    repos = _json.loads((p / "addons" / "repos.json").read_text(encoding="utf-8"))
+    assert repos[0]["sha"] == sha2
