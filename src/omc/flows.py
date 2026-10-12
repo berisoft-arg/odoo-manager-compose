@@ -2110,6 +2110,47 @@ def faltantes_disco(proyecto) -> list:
     return sorted(set(faltantes))
 
 
+def _gate_pull(proyecto, args):
+    """Gate opt-in del pull en menú 2 (pro-menú: también tras responder No).
+
+    True si corrió un ciclo de pull (aunque no trajera cambios).
+    """
+    if (getattr(args, "sin_pull", False) or not sys.stdin.isatty()
+            or getattr(args, "yes", False)):
+        return False
+    try:
+        _todos_pull = load_repos(proyecto)
+    except ValueError:
+        _todos_pull = []
+    _candidatos = [r for r in _todos_pull
+                   if r.get("url") and r.get("branch") and r.get("repo")
+                   and (proyecto / (r.get("path") or "")).is_dir()]
+    if not _candidatos:
+        return False
+    if not ask_si_no("¿Hacer git pull de repos instalados?", default_no=True):
+        return False
+    from .tui import checklist as _cl_pull
+    try:
+        _items = [f"{r['repo']}  [{r['path']}]" for r in _candidatos]
+        _sel = _cl_pull("Repos para git pull", ["todos"] + _items)
+    except Exception:  # noqa: BLE001
+        _sel = None
+    if not _sel:
+        return False
+    _elegidos = (_candidatos if "todos" in _sel else
+                 [r for r in _candidatos
+                  if f"{r['repo']}  [{r['path']}]" in _sel])
+    _cambios_pull = []
+    for _r in _elegidos:
+        _c = pull_repo_con_plan(proyecto, _r)
+        if _c:
+            _cambios_pull.append(_c)
+    from .manifest import save_repos as _save_pull
+    _save_pull(proyecto, _todos_pull)
+    menu_aplicar_pull(proyecto, _cambios_pull, db=getattr(args, "db", None))
+    return True
+
+
 def run_sync(args):
     """Post-despliegue: instala (bundle opcional) + deps + Dockerfile + rebuild.
 
@@ -2151,6 +2192,7 @@ def run_sync(args):
     historial_iniciar(proyecto, "sync")
     snapshot_proyecto(proyecto, motivo="sync")
     # 1) Instalador: mismo del inicio (bundle o lista numerada), salvo --bundle/--skip-install
+    _pull_hecho = False
     if args.bundle:
         print(f"== Bundle {args.bundle} ==", flush=True)
         br = args.branch or (odoo_to_branch(args.odoo) if args.odoo else "")
@@ -2166,40 +2208,17 @@ def run_sync(args):
                 historial_cerrar()
                 return  # Nada elegido en puerta_instalacion: vuelta al menú sin ruido
         else:
-            historial_cerrar()
-            return  # no hay nada nuevo: vuelve al menú sin mostrar deps ni aplicar
+            # Nada nuevo: igual se ofrece el pull (pro-menú); si tampoco
+            # hay pull, vuelta al menú sin ruido.
+            _pull_hecho = _gate_pull(proyecto, args)
+            if not _pull_hecho:
+                historial_cerrar()
+                return
     # Pull de repos instalados (opt-in): trae actualizaciones ANTES de analizar
     # deps, para un solo ciclo de aplicación. Default no; sin tty se saltea.
-    if (not getattr(args, "sin_pull", False) and sys.stdin.isatty()
-            and not args.yes):
-        try:
-            _todos_pull = load_repos(proyecto)
-        except ValueError:
-            _todos_pull = []
-        _candidatos = [r for r in _todos_pull
-                       if r.get("url") and r.get("branch") and r.get("repo")
-                       and (proyecto / (r.get("path") or "")).is_dir()]
-        if _candidatos and ask_si_no("¿Hacer git pull de repos instalados?",
-                                     default_no=True):
-            from .tui import checklist as _cl_pull
-            try:
-                _items = [f"{r['repo']}  [{r['path']}]" for r in _candidatos]
-                _sel = _cl_pull("Repos para git pull", ["todos"] + _items)
-            except Exception:  # noqa: BLE001
-                _sel = None
-            if _sel:
-                _elegidos = (_candidatos if "todos" in _sel else
-                             [r for r in _candidatos
-                              if f"{r['repo']}  [{r['path']}]" in _sel])
-                _cambios_pull = []
-                for _r in _elegidos:
-                    _c = pull_repo_con_plan(proyecto, _r)
-                    if _c:
-                        _cambios_pull.append(_c)
-                from .manifest import save_repos as _save_pull
-                _save_pull(proyecto, _todos_pull)
-                menu_aplicar_pull(proyecto, _cambios_pull,
-                                  db=getattr(args, "db", None))
+    # (Si ya corrió en la rama No, no se pregunta dos veces.)
+    if not _pull_hecho:
+        _gate_pull(proyecto, args)
     # Auto-export: fusiona el estado actual en addons-bundle.json (lo crea si
     # falta) para clonar esta instancia después. Suma sin borrar entradas manuales.
     if actualizar_bundle_desde_estado(proyecto):

@@ -3351,3 +3351,42 @@ def test_add_auto_pull_imprime_linea(tmp_path, capsys):
     assert "testrepo: " in out and ".." in out and "(1 commits)" in out
     repos = _json.loads((p / "addons" / "repos.json").read_text(encoding="utf-8"))
     assert repos[0]["sha"] == sha2
+
+
+def test_run_sync_no_descargar_igual_ofrece_pull(monkeypatch, tmp_path, capsys):
+    """Regresión: responder No a módulos nuevos igual ofrece el pull (pro-menú)."""
+    import json as _json
+    import omc.flows as F
+    import omc.tui as _tui
+    p = tmp_path / "proj"
+    (p / "addons" / "testrepo").mkdir(parents=True)
+    (p / "docker-compose.yml").write_text("services: {}", encoding="utf-8")
+    (p / "addons" / "repos.json").write_text(_json.dumps(
+        [{"repo": "testrepo", "path": "addons/testrepo", "url": "https://x/y.git",
+          "branch": "17.0", "modules": []}]), encoding="utf-8")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    def _ask(prompt, **k):
+        if "Descargar" in prompt:
+            return False
+        if "git pull" in prompt:
+            return True
+        return False
+    pulls, aplicados = [], []
+    monkeypatch.setattr(F, "ask_si_no", _ask)
+    monkeypatch.setattr(_tui, "checklist", lambda *a, **k: ["todos"])
+    monkeypatch.setattr(F, "pull_repo_con_plan",
+                        lambda proyecto, r: pulls.append(r["repo"]) or
+                        {"repo": r["repo"], "path": r["path"], "branch": "17.0",
+                         "viejo": "aaaaaaa", "nuevo": "bbbbbbb", "cambiado": True,
+                         "archivos": ["testmod/models/x.py"]})
+    monkeypatch.setattr(F, "menu_aplicar_pull",
+                        lambda proyecto, cambios, db=None: aplicados.extend(cambios) or "nada")
+    monkeypatch.setattr(F, "actualizar_bundle_desde_estado", lambda *a, **k: False)
+    monkeypatch.setattr(F, "run_check_deps", lambda *a, **k: None)
+    monkeypatch.setattr(F, "run_deps_simple", lambda *a, **k: None)
+    run_sync(SimpleNamespace(proyecto=str(p), bundle="", odoo="", branch="",
+                             yes=False, skip_install=False, no_deploy=False))
+    assert pulls == ["testrepo"]
+    assert [c["repo"] for c in aplicados] == ["testrepo"]
+    repos = _json.loads((p / "addons" / "repos.json").read_text(encoding="utf-8"))
+    assert [r["repo"] for r in repos] == ["testrepo"]
