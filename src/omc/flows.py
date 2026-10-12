@@ -2552,8 +2552,11 @@ def run_bundle(args):
 def pull_repo_con_plan(proyecto, r):
     """Pull de un repo + diff SHA viejo->nuevo. No aplica nada.
 
-    Devuelve dict {repo, path, branch, viejo, nuevo, cambiado, archivos}
-    o None si el clon no existe (omitido).
+    Devuelve dict {repo, path, branch, viejo, nuevo, cambiado, archivos,
+    modulos_nuevos} o None si el clon no existe (omitido).
+    `archivos` trae solo lo materializado en disco (proxy de la selección
+    sparse ≈ instalados); `modulos_nuevos` lista los top-dirs del diff
+    ausentes en disco (van por menú 2 » Descargar módulos nuevos).
     """
     from .manifest import anotar_sha
     proyecto = Path(proyecto)
@@ -2582,9 +2585,24 @@ def pull_repo_con_plan(proyecto, r):
                             if x.strip()]
         except Exception:  # noqa: BLE001
             archivos = []
+    en_disco, modulos_nuevos, _es_nuevo = [], [], {}
+    for f in archivos:
+        top = f.split("/", 1)[0] if "/" in f else ""
+        if top and not (p / top).is_dir() and not (p / f).exists():
+            if top not in _es_nuevo:
+                t = subprocess.run(
+                    ["git", "-C", str(p), "cat-file", "-t", f"{nuevo}:{top}"],
+                    text=True, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
+                    timeout=30)
+                _es_nuevo[top] = (t.stdout or "").strip() == "tree"
+                if _es_nuevo[top]:
+                    modulos_nuevos.append(top)
+            if _es_nuevo[top]:
+                continue  # módulo nuevo fuera del sparse: va por menú 2
+        en_disco.append(f)
     return {"repo": r.get("repo"), "path": r.get("path"), "branch": r.get("branch"),
             "viejo": viejo[:7], "nuevo": nuevo[:7], "cambiado": viejo != nuevo,
-            "archivos": archivos}
+            "archivos": en_disco, "modulos_nuevos": modulos_nuevos}
 
 
 _PESO_NIVEL = {"nada": 0, "restart": 1, "update": 2, "sync": 3}
@@ -2684,11 +2702,18 @@ def menu_aplicar_pull(proyecto, cambios, db=None):
              for f in (c.get("archivos") or [])])
         for mod, nv in sorted(por_mod.items()):
             print(f"    {mod}: {nv}")
+    nuevos_pull = sorted({m for c in con_cambios for m in (c.get("modulos_nuevos") or [])})
+    if nuevos_pull:
+        print(f"+ {len(nuevos_pull)} módulo(s) nuevo(s) no seleccionado(s) "
+              f"(sparse): {', '.join(nuevos_pull)} → menú 2 » Descargar módulos nuevos")
     global_ = "nada"
     for _, _, nivel, _ in niveles.values():
         global_ = _max_nivel(global_, nivel)
     if global_ == "nada":
-        print("Solo docs/tests: nada que aplicar.")
+        if nuevos_pull and not any(c.get("archivos") for c in con_cambios):
+            print("Solo módulos nuevos: van por menú 2 (nada que aplicar acá).")
+        else:
+            print("Solo docs/tests: nada que aplicar.")
         return ""
     mods_update = sorted(mods_update)
     if global_ == "sync":

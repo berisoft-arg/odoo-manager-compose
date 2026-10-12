@@ -113,6 +113,7 @@
 ## [Sin publicar]
 
 - **Fix menú 2: responder No a módulos nuevos salteaba el pull**: el `return` temprano devolvía al menú antes del gate `¿Hacer git pull...?` (pro-menú: ahora la rama No igual ofrece el pull y solo vuelve si tampoco hay pull; helper `_gate_pull` compartido, sin doble pregunta).
+- **Pull honesto con sparse**: el diff se parte en materializado (clasifica y sugiere) vs módulos nuevos fuera del sparse (se listan con destino `menú 2 » Descargar módulos nuevos`, excluidos del `-u`; ese flujo ya hace `sparse-checkout add` + validación). Sin preguntas nuevas, sin auto-materializar, sin auto-instalar.
 
 ## [1.0.0]
 

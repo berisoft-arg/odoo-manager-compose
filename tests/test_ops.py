@@ -3390,3 +3390,68 @@ def test_run_sync_no_descargar_igual_ofrece_pull(monkeypatch, tmp_path, capsys):
     assert [c["repo"] for c in aplicados] == ["testrepo"]
     repos = _json.loads((p / "addons" / "repos.json").read_text(encoding="utf-8"))
     assert [r["repo"] for r in repos] == ["testrepo"]
+
+
+def test_pull_repo_con_plan_separa_modulos_nuevos(monkeypatch, tmp_path, capsys):
+    """El diff fuera del sparse va a modulos_nuevos, no a archivos (menú 2)."""
+    import subprocess as _sp
+    import os as _os
+    import omc.flows as F
+    rem = tmp_path / "origin"
+    (rem / "modA").mkdir(parents=True)
+    (rem / "modA" / "__manifest__.py").write_text("{}", encoding="utf-8")
+    e = dict(_os.environ, GIT_AUTHOR_NAME="t", GIT_AUTHOR_EMAIL="t@t",
+             GIT_COMMITTER_NAME="t", GIT_COMMITTER_EMAIL="t@t")
+    _sp.run(["git", "init", "-qb", "17.0"], cwd=str(rem), env=e, check=True)
+    _sp.run(["git", "add", "."], cwd=str(rem), env=e, check=True)
+    _sp.run(["git", "commit", "-qm", "uno"], cwd=str(rem), env=e, check=True)
+    sha1 = _sp.run(["git", "rev-parse", "HEAD"], cwd=str(rem), env=e, check=True,
+                   text=True, stdout=_sp.PIPE).stdout.strip()
+    (rem / "modA" / "otro.py").write_text("x=1\n", encoding="utf-8")
+    (rem / "modB").mkdir()
+    (rem / "modB" / "__manifest__.py").write_text("{}", encoding="utf-8")
+    _sp.run(["git", "add", "."], cwd=str(rem), env=e, check=True)
+    _sp.run(["git", "commit", "-qm", "dos"], cwd=str(rem), env=e, check=True)
+    p = tmp_path / "proj"
+    dest = p / "addons" / "oca" / "r"
+    dest.parent.mkdir(parents=True)
+    _sp.run(["git", "clone", "-q", "--sparse", str(rem), str(dest)], env=e, check=True)
+    _sp.run(["git", "sparse-checkout", "set", "modA"], cwd=str(dest), env=e, check=True)
+    r = {"org": "oca", "repo": "r", "url": str(rem), "branch": "17.0",
+         "path": "addons/oca/r", "modules": ["modA"], "sha": sha1}
+    monkeypatch.setattr(F, "git_pull", lambda d: None)
+    c = F.pull_repo_con_plan(p, r)
+    assert c["cambiado"] is True
+    assert c["archivos"] and all(f.startswith("modA/") for f in c["archivos"])
+    assert c["modulos_nuevos"] == ["modB"]
+    assert not (dest / "modB").exists()
+
+
+def test_menu_aplicar_pull_avisa_modulos_nuevos(monkeypatch, capsys):
+    """Los no materializados se informan con destino menú 2, fuera del sugerido."""
+    import omc.flows as F
+    cambios = [{"repo": "r", "path": "addons/oca/r", "branch": "17.0",
+                "viejo": "aaaaaaa", "nuevo": "bbbbbbb", "cambiado": True,
+                "archivos": ["modA/models/x.py"], "modulos_nuevos": ["modB"]}]
+    vistas = {}
+    def _askop(prompt, opciones, default=None, **k):
+        vistas["opciones"] = list(opciones)
+        return "Nada"
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(F, "ask_opcion", _askop)
+    assert F.menu_aplicar_pull("/tmp", cambios) == ""
+    out = capsys.readouterr().out
+    assert "modB" in out and "menú 2" in out
+    assert "modA: update" in out
+    assert not any("modB" in o for o in vistas["opciones"])
+
+
+def test_menu_aplicar_pull_solo_nuevos_no_dice_docs(monkeypatch, capsys):
+    """Si todo el diff es módulos nuevos, el mensaje lo dice (no 'docs/tests')."""
+    import omc.flows as F
+    cambios = [{"repo": "r", "path": "addons/oca/r", "branch": "17.0",
+                "viejo": "aaaaaaa", "nuevo": "bbbbbbb", "cambiado": True,
+                "archivos": [], "modulos_nuevos": ["modB"]}]
+    assert F.menu_aplicar_pull("/tmp", cambios) == ""
+    out = capsys.readouterr().out
+    assert "Solo módulos nuevos" in out and "docs/tests" not in out

@@ -307,6 +307,12 @@ El pull filtrado **guarda la lista completa** (el filtro elige qué traer, nunca
 qué guardar). Si tocaste código dentro del clon, **no** mezcla: avisa y lo deja
 (commiteá/pusheá primero).
 
+**Pull = novedades de lo tuyo; nuevos = menú 2.** El clon sparse es tu selección
+de módulos: el pull clasifica y sugiere solo sobre lo materializado en disco
+(proxy de instalados). Si el diff trae módulos nuevos fuera del sparse, el menú
+los lista con destino `menú 2 » Descargar módulos nuevos` (ese flujo los agrega
+al sparse, valida y avisa depends) y los excluye del `-u` sugerido.
+
 **El pull analiza el diff y propone cómo aplicarlo** (también desde el menú 2,
 que lo ofrece tras descargar y antes de deps). Clasificación por archivo:
 
