@@ -110,7 +110,7 @@
 - **Pull con menú de aplicación**: tras el pull analiza el diff (`git diff SHA viejo..nuevo`) y clasifica por archivo (modelos/vistas/datos/assets→`-u`, solo-Python→restart, requirements→sync, docs/tests→nada); sin cambios no sugiere nada; menú de una confirmación (aplicar sugerido por default, restart, update multi en un comando + restart, rebuild, sync completo, nada); en prod ofrece backup antes del `-u`; sin tty solo informa. Vive en el menú 2 (tras descargar, antes de deps, default no) y en `omc addons pull [--db BD]` directo. Cada mutación git deja su línea (`repo: viejo..nuevo (N commits)`).
 - **Docs: aplicar cambios post-pull**: `Manual §5.8` ahora explica que el `-u` va con `omc update` (contenedor efímero; con `exec` sale `Address already in use`), cuándo basta `restart`, la receta dev-primero (`backup → restore --neutralizar → omc test → omc update prod`) y que `addons pull <repo>` filtra por el campo `repo` de `repos.json` (no la URL).
 
-## [Sin publicar]
+## [1.5.1] - 2026-10-11
 
 - **Fix menú 2: responder No a módulos nuevos salteaba el pull**: el `return` temprano devolvía al menú antes del gate `¿Hacer git pull...?` (pro-menú: ahora la rama No igual ofrece el pull y solo vuelve si tampoco hay pull; helper `_gate_pull` compartido, sin doble pregunta).
 - **Pull honesto con sparse**: el diff se parte en materializado (clasifica y sugiere) vs módulos nuevos fuera del sparse (se listan con destino `menú 2 » Descargar módulos nuevos`, excluidos del `-u`; ese flujo ya hace `sparse-checkout add` + validación). Sin preguntas nuevas, sin auto-materializar, sin auto-instalar.
