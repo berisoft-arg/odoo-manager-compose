@@ -3504,3 +3504,34 @@ def test_rclone_config_fallback_contenedor(monkeypatch, tmp_path, capsys):
     assert config_cmds, f"no se ejecutó rclone config: {comandos}"
     assert "docker" in config_cmds[0][0]
     assert "rclone" in config_cmds[0]
+
+
+def test_rclone_migra_ro_a_rw(monkeypatch, tmp_path, capsys):
+    """Compose existente con :ro se migra a :rw antes de configurar."""
+    import omc.flows as F
+    import shutil as _shutil
+    p = _proj_rclone(tmp_path)
+    compose = (
+        "services:\n"
+        "  rclone:\n"
+        "    image: rclone/rclone\n"
+        "    profiles: [\"backup\"]\n"
+        "    volumes:\n"
+        "      - ./scripts/rclone.conf:/config/rclone/rclone.conf:ro\n"
+        "      - ./backups:/data\n"
+    )
+    (p / "docker-compose.yml").write_text(compose, encoding="utf-8")
+    comandos = []
+    def _run(cmd, **kw):
+        comandos.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(F, "es_interactivo", lambda: True)
+    monkeypatch.setattr(F, "preguntar", lambda *a, **k: "no")
+    monkeypatch.setattr(F.subprocess, "run", _run)
+    monkeypatch.setattr(_shutil, "which", lambda n: None)
+    F.modo_configurar_rclone(SimpleNamespace(proyecto=str(p), rclone_remote="gdrive", no_input=False))
+    texto = (p / "docker-compose.yml").read_text(encoding="utf-8")
+    assert ":rw" in texto
+    assert ":ro" not in texto
+    assert "migrado de :ro a :rw" in capsys.readouterr().out

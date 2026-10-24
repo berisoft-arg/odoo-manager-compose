@@ -1173,6 +1173,14 @@ def modo_configurar_rclone(args):
         ctxt = ctxt.replace("\nvolumes:", "\n" + bloque + "volumes:", 1)
         (salida / "docker-compose.yml").write_text(ctxt, encoding="utf-8")
         print("  ✓ servicio rclone agregado al compose.")
+    # Migrar :ro → :rw en compose existente (proyectos previos a 1.5.3):
+    # rclone config necesita escribir el token dentro del contenedor.
+    _mount_ro = "./scripts/rclone.conf:/config/rclone/rclone.conf:ro"
+    _mount_rw = "./scripts/rclone.conf:/config/rclone/rclone.conf:rw"
+    if _mount_ro in ctxt:
+        ctxt = ctxt.replace(_mount_ro, _mount_rw)
+        (salida / "docker-compose.yml").write_text(ctxt, encoding="utf-8")
+        print("  ✓ rclone.conf migrado de :ro a :rw en docker-compose.yml.")
     remote = args.rclone_remote or ""
     if not args.no_input and es_interactivo() and not remote:
         remote = (

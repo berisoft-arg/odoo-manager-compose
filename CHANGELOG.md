@@ -119,6 +119,10 @@
 
 - **Fix rclone config: `device or resource busy`**: el conf estaba montado `:ro` en el compose pero `rclone config` necesita escribir el token. Ahora prefiere rclone del host (`rclone config --config`); sin host, usa el contenedor con el conf montado `:rw`.
 
+## [Sin publicar]
+
+- **Fix rclone config: migrar `:ro` → `:rw` en compose existente**: proyectos creados antes del fix tenían el conf montado `:ro`; ahora `modo_configurar_rclone` lo migra automáticamente antes de correr `rclone config` en el contenedor (idempotente, no toca nada si ya es `:rw`).
+
 ## [1.0.0]
 
 Primera versión documentada: asistente + menú en loop, creación/operación de
