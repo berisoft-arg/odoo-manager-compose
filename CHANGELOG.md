@@ -123,6 +123,10 @@
 
 - **Fix rclone config: migrar `:ro` → `:rw` en compose existente**: proyectos creados antes del fix tenían el conf montado `:ro`; ahora `modo_configurar_rclone` lo migra automáticamente antes de correr `rclone config` en el contenedor (idempotente, no toca nada si ya es `:rw`).
 
+## [Sin publicar]
+
+- **Fix rclone config: mount de directorio en vez de archivo individual**: el conf montado como archivo único no se puede renombrar (`device or resource busy`) aunque sea `:rw` — rclone config lo renombra para hacer backup antes de escribir. Ahora se monta `./scripts:/config/rclone` (directorio), migrando automáticamente los mounts `:ro` y `:rw` de proyectos previos. Nuevo proyecto + migración idempotente.
+
 ## [1.0.0]
 
 Primera versión documentada: asistente + menú en loop, creación/operación de
