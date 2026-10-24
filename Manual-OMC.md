@@ -947,7 +947,7 @@ Verificación (desde `/`, `/opt`, `/home`, como root y como admin):
 
 ```bash
 which omc  # esperado: /usr/local/bin/omc (global) o ~/.local/bin/omc (por usuario)
-omc --version  # 1.5.3
+omc --version  # 1.5.4
 ```
 
 > `omc` funciona desde cualquier directorio; los proyectos siempre van a
@@ -1031,7 +1031,7 @@ source ~/.bashrc
 **Verificación:**
 
 ```bash
-which omc && omc --version  # ~/.local/bin/omc, 1.5.3
+which omc && omc --version  # ~/.local/bin/omc, 1.5.4
 cd ~/odoo-manager-compose
 python3 -m pytest tests/ -q  # esperado: 209 passed
 omc crear --version 18 --entorno dev --nombre odoo18  # prueba en /opt/odoo18
