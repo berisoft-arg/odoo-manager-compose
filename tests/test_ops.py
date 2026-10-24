@@ -3455,3 +3455,52 @@ def test_menu_aplicar_pull_solo_nuevos_no_dice_docs(monkeypatch, capsys):
     assert F.menu_aplicar_pull("/tmp", cambios) == ""
     out = capsys.readouterr().out
     assert "Solo módulos nuevos" in out and "docs/tests" not in out
+
+
+def _proj_rclone(tmp_path):
+    p = tmp_path / "proj"
+    (p / "scripts").mkdir(parents=True)
+    (p / "docker-compose.yml").write_text("services: {}\n", encoding="utf-8")
+    return p
+
+
+def test_rclone_config_prefiere_host(monkeypatch, tmp_path, capsys):
+    """Con rclone en host, config corre en host (no en contenedor :ro)."""
+    import omc.flows as F
+    import shutil as _shutil
+    p = _proj_rclone(tmp_path)
+    comandos = []
+    def _run(cmd, **kw):
+        comandos.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(F, "es_interactivo", lambda: True)
+    monkeypatch.setattr(F, "preguntar", lambda *a, **k: "si")
+    monkeypatch.setattr(F.subprocess, "run", _run)
+    monkeypatch.setattr(_shutil, "which", lambda n: "/usr/bin/rclone" if n == "rclone" else None)
+    F.modo_configurar_rclone(SimpleNamespace(proyecto=str(p), rclone_remote="gdrive", no_input=False))
+    config_cmds = [c for c in comandos if "config" in c and isinstance(c, list)]
+    assert config_cmds, f"no se ejecutó rclone config: {comandos}"
+    assert config_cmds[0][0] == "rclone"
+    assert "--config" in config_cmds[0]
+
+
+def test_rclone_config_fallback_contenedor(monkeypatch, tmp_path, capsys):
+    """Sin rclone en host, config corre en el contenedor del compose."""
+    import omc.flows as F
+    import shutil as _shutil
+    p = _proj_rclone(tmp_path)
+    comandos = []
+    def _run(cmd, **kw):
+        comandos.append(cmd)
+        return SimpleNamespace(returncode=0, stdout="", stderr="")
+    monkeypatch.setattr("sys.stdin.isatty", lambda: True)
+    monkeypatch.setattr(F, "es_interactivo", lambda: True)
+    monkeypatch.setattr(F, "preguntar", lambda *a, **k: "si")
+    monkeypatch.setattr(F.subprocess, "run", _run)
+    monkeypatch.setattr(_shutil, "which", lambda n: None)
+    F.modo_configurar_rclone(SimpleNamespace(proyecto=str(p), rclone_remote="gdrive", no_input=False))
+    config_cmds = [c for c in comandos if "config" in c and isinstance(c, list)]
+    assert config_cmds, f"no se ejecutó rclone config: {comandos}"
+    assert "docker" in config_cmds[0][0]
+    assert "rclone" in config_cmds[0]

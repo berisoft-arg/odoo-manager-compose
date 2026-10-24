@@ -6,5 +6,5 @@
     profiles: ["backup"]
     volumes:
       - ./backups:/data
-      - ./scripts/rclone.conf:/config/rclone/rclone.conf:ro
+      - ./scripts/rclone.conf:/config/rclone/rclone.conf:rw
     command: version

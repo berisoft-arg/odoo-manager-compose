@@ -1195,7 +1195,8 @@ def modo_configurar_rclone(args):
         print(f"  ✓ {rconf} creado (complétalo con rclone config o a mano).")
     import shutil as _sh
 
-    # Sin nada que instalar en host: se configura dentro del servicio rclone del compose
+    # Si hay rclone en host, configuro ahí (el conf del compose está montado
+    # y puede ser :ro → rclone config no puede escribirlo dentro del contenedor)
     if not args.no_input and es_interactivo():
         if (
             preguntar(
@@ -1205,22 +1206,28 @@ def modo_configurar_rclone(args):
             )
             == "si"
         ):
-            if _sh.which("rclone") is None:
-                print("  (uso el servicio rclone del compose, sin instalar nada)")
-            subprocess.run(
-                [
-                    "docker",
-                    "compose",
-                    "--profile",
-                    "backup",
-                    "run",
-                    "--rm",
-                    "rclone",
-                    "config",
-                ],
-                cwd=str(salida),
-            )
-            print(f"  ✓ Config guardada en {rconf} (montada por el servicio).")
+            if _sh.which("rclone"):
+                print("  (configurando con rclone del host)")
+                subprocess.run(
+                    ["rclone", "config", "--config", str(rconf)],
+                    cwd=str(salida),
+                )
+            else:
+                print("  (sin rclone en host: usando el servicio rclone del compose)")
+                subprocess.run(
+                    [
+                        "docker",
+                        "compose",
+                        "--profile",
+                        "backup",
+                        "run",
+                        "--rm",
+                        "rclone",
+                        "config",
+                    ],
+                    cwd=str(salida),
+                )
+            print(f"  ✓ Config guardada en {rconf}.")
     print(f"  Verificando acceso al remote '{remote}' ...")
     t = subprocess.run(
         [
